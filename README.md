@@ -8,6 +8,7 @@
 
 - **[Game Design Document (GDD v1.0)](./docs/GDD.md):** Especificação completa de gameplay, economia em tempo real, facção *Reino da Coroa Solar*, matriz matemática de combate 4x4, progressão Roguelike em 3 Atos, relíquias, perfis de IA e critérios de QA.
 - **[Governança Oficial do Repositório](./docs/GOVERNANCE.md):** Arquitetura de camadas (*Headless Core Engine* vs. *Phaser 3 Renderer/UI*), topologia de subagentes e política de alocação de modelos, fluxo Git, harmonizações canônicas do GDD e portões de qualidade (*Definition of Done*).
+- **[Relatório de Entrega & Validação GD — Sprint 1](./docs/SPRINT_1_REPORT.md):** Auditoria seção por seção da Sprint 1 contra o GDD v1.0, decisões de harmonização matemática e resultados das 8 suítes de testes automatizados (57/57 verdes).
 
 ---
 
