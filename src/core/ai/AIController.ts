@@ -101,34 +101,50 @@ export class AIController {
     // t=45s: Upgrade Slot 0 -> bldg_barracks_2 (130g)
     if (this.stepIndex === 0) {
       const s0 = slots.find((s) => s.slotIndex === 0);
-      if (s0 && s0.structureId === null && gold >= 100) {
-        if (engine.buildStructure('ENEMY', 0, 'bldg_barracks_1')) {
-          this.stepIndex = 1;
-          return;
+      if (s0 && s0.structureId === null) {
+        if (gold >= 100) {
+          if (engine.buildStructure('ENEMY', 0, 'bldg_barracks_1')) {
+            this.stepIndex = 1;
+            return;
+          }
+        } else if (frontlineX <= 1400) {
+          return; // [P0-1] Save gold for planned step
         }
       }
     } else if (this.stepIndex === 1) {
       const s1 = slots.find((s) => s.slotIndex === 1);
-      if (s1 && s1.structureId === null && gold >= 100) {
-        if (engine.buildStructure('ENEMY', 1, 'bldg_barracks_1')) {
-          this.stepIndex = 2;
-          return;
+      if (s1 && s1.structureId === null) {
+        if (gold >= 100) {
+          if (engine.buildStructure('ENEMY', 1, 'bldg_barracks_1')) {
+            this.stepIndex = 2;
+            return;
+          }
+        } else if (frontlineX <= 1400) {
+          return; // [P0-1] Save gold for planned step
         }
       }
     } else if (this.stepIndex === 2) {
       const s2 = slots.find((s) => s.slotIndex === 2);
-      if (s2 && s2.structureId === null && gold >= 140) {
-        if (engine.buildStructure('ENEMY', 2, 'bldg_stable_1')) {
-          this.stepIndex = 3;
-          return;
+      if (s2 && s2.structureId === null) {
+        if (gold >= 140) {
+          if (engine.buildStructure('ENEMY', 2, 'bldg_stable_1')) {
+            this.stepIndex = 3;
+            return;
+          }
+        } else if (frontlineX <= 1400) {
+          return; // [P0-1] Save gold for planned step
         }
       }
     } else if (this.stepIndex === 3) {
       const s0 = slots.find((s) => s.slotIndex === 0);
-      if (s0 && s0.structureId === 'bldg_barracks_1' && gold >= 130) {
-        if (engine.upgradeStructure('ENEMY', 0)) {
-          this.stepIndex = 4;
-          return;
+      if (s0 && s0.structureId === 'bldg_barracks_1') {
+        if (gold >= 130) {
+          if (engine.upgradeStructure('ENEMY', 0)) {
+            this.stepIndex = 4;
+            return;
+          }
+        } else if (frontlineX <= 1400) {
+          return; // [P0-1] Save gold for planned step
         }
       }
     }
@@ -169,41 +185,61 @@ export class AIController {
     // Upgrade Slot 9 -> bldg_siege_2 (210g)
     if (this.stepIndex === 0) {
       const s0 = slots.find((s) => s.slotIndex === 0);
-      if (s0 && s0.structureId === null && gold >= 100) {
-        if (engine.buildStructure('ENEMY', 0, 'bldg_barracks_1')) {
-          this.stepIndex = 1;
-          return;
+      if (s0 && s0.structureId === null) {
+        if (gold >= 100) {
+          if (engine.buildStructure('ENEMY', 0, 'bldg_barracks_1')) {
+            this.stepIndex = 1;
+            return;
+          }
+        } else if (frontlineX <= 1400) {
+          return; // [P0-1] Save gold for step 0
         }
       }
     } else if (this.stepIndex === 1) {
       const s3 = slots.find((s) => s.slotIndex === 3);
-      if (s3 && s3.structureId === null && gold >= 90) {
-        if (engine.buildStructure('ENEMY', 3, 'bldg_archery_1')) {
-          this.stepIndex = 2;
-          return;
+      if (s3 && s3.structureId === null) {
+        if (gold >= 90) {
+          if (engine.buildStructure('ENEMY', 3, 'bldg_archery_1')) {
+            this.stepIndex = 2;
+            return;
+          }
+        } else if (frontlineX <= 1400) {
+          return; // [P0-1] Save gold for step 1
         }
       }
     } else if (this.stepIndex === 2) {
       const s9 = slots.find((s) => s.slotIndex === 9);
-      if (s9 && s9.structureId === null && gold >= 160) {
-        if (engine.buildStructure('ENEMY', 9, 'bldg_siege_1')) {
-          this.stepIndex = 3;
-          return;
+      if (s9 && s9.structureId === null) {
+        if (gold >= 160) {
+          if (engine.buildStructure('ENEMY', 9, 'bldg_siege_1')) {
+            this.stepIndex = 3;
+            return;
+          }
+        } else if (frontlineX <= 1400) {
+          return; // [P0-1] Save gold for step 2
         }
       }
     } else if (this.stepIndex === 3) {
-      if (mineLevel < 2 && gold >= 110) {
-        if (engine.upgradeMine('ENEMY')) {
-          this.stepIndex = 4;
-          return;
+      if (mineLevel < 2) {
+        if (gold >= 110) {
+          if (engine.upgradeMine('ENEMY')) {
+            this.stepIndex = 4;
+            return;
+          }
+        } else if (frontlineX <= 1400) {
+          return; // [P0-1] Save gold for step 3
         }
       }
     } else if (this.stepIndex === 4) {
       const s9 = slots.find((s) => s.slotIndex === 9);
-      if (s9 && s9.structureId === 'bldg_siege_1' && gold >= 210) {
-        if (engine.upgradeStructure('ENEMY', 9)) {
-          this.stepIndex = 5;
-          return;
+      if (s9 && s9.structureId === 'bldg_siege_1') {
+        if (gold >= 210) {
+          if (engine.upgradeStructure('ENEMY', 9)) {
+            this.stepIndex = 5;
+            return;
+          }
+        } else if (frontlineX <= 1400) {
+          return; // [P0-1] Save gold for step 4
         }
       }
     }
@@ -294,7 +330,8 @@ export class AIController {
     // Condition 3: Siege Threat >= 2 and Stables < 2 -> Weight +60
     // Counter with Stables (Cavalry speed 120px/s flanks artillery)
     if (threats.siegeThreat >= 2 && structureCounts.stable < 2) {
-      if (this.tryBuildOrUpgrade(engine, slots, 'bldg_stable_1', 'bldg_stable_2', 'STABLE', gold)) {
+      const status = this.tryBuildOrUpgrade(engine, slots, 'bldg_stable_1', 'bldg_stable_2', 'STABLE', gold);
+      if (status === 'EXECUTED' || status === 'WAITING_GOLD') {
         return;
       }
     }
@@ -302,7 +339,8 @@ export class AIController {
     // Condition 1: Heavy Threat > 1200 and Arcane Towers < 2 -> Weight +50
     // Magic damage melts heavy armor
     if (threats.heavyThreat > 1200 && structureCounts.arcane < 2) {
-      if (this.tryBuildOrUpgrade(engine, slots, 'bldg_arcane_1', 'bldg_arcane_2', 'ARCANE', gold)) {
+      const status = this.tryBuildOrUpgrade(engine, slots, 'bldg_arcane_1', 'bldg_arcane_2', 'ARCANE', gold);
+      if (status === 'EXECUTED' || status === 'WAITING_GOLD') {
         return;
       }
     }
@@ -310,7 +348,8 @@ export class AIController {
     // Condition 2: Light Threat > 800 and Archery < 2 -> Weight +40
     // Piercing damage deals 150% vs light armor
     if (threats.lightThreat > 800 && structureCounts.archery < 2) {
-      if (this.tryBuildOrUpgrade(engine, slots, 'bldg_archery_1', 'bldg_archery_2', 'ARCHERY', gold)) {
+      const status = this.tryBuildOrUpgrade(engine, slots, 'bldg_archery_1', 'bldg_archery_2', 'ARCHERY', gold);
+      if (status === 'EXECUTED' || status === 'WAITING_GOLD') {
         return;
       }
     }
@@ -355,26 +394,34 @@ export class AIController {
     _tier2Id: StructureTypeId,
     category: StructureCategory,
     gold: number
-  ): boolean {
+  ): 'EXECUTED' | 'WAITING_GOLD' | 'NOT_POSSIBLE' {
     // 1. Try upgrading an existing Tier 1 structure of this category
     const existingTier1 = slots.find((s) => s.structureId === tier1Id);
     if (existingTier1) {
       const def = getStructureDefinition(tier1Id);
       if (gold >= def.upgradeCostGold) {
-        return engine.upgradeStructure('ENEMY', existingTier1.slotIndex);
+        if (engine.upgradeStructure('ENEMY', existingTier1.slotIndex)) {
+          return 'EXECUTED';
+        }
+      } else {
+        return 'WAITING_GOLD';
       }
     }
 
     // 2. Try building a new Tier 1 structure
-    const defT1 = getStructureDefinition(tier1Id);
-    if (gold >= defT1.buildCostGold) {
-      const targetSlot = this.findBestFreeSlot(slots, category);
-      if (targetSlot !== null) {
-        return engine.buildStructure('ENEMY', targetSlot, tier1Id);
+    const targetSlot = this.findBestFreeSlot(slots, category);
+    if (targetSlot !== null) {
+      const defT1 = getStructureDefinition(tier1Id);
+      if (gold >= defT1.buildCostGold) {
+        if (engine.buildStructure('ENEMY', targetSlot, tier1Id)) {
+          return 'EXECUTED';
+        }
+      } else {
+        return 'WAITING_GOLD';
       }
     }
 
-    return false;
+    return 'NOT_POSSIBLE';
   }
 
   private tryUpgradeTier1(

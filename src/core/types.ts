@@ -161,3 +161,72 @@ export interface GameStateSnapshot {
   readonly hazards: GreekFireHazard[];
   readonly stateHash: string;
 }
+
+// ============================================================================
+// RELICS DEFINITIONS (Sprint 3)
+// ============================================================================
+export type {
+  RelicRarity,
+  RelicTypeId,
+  RelicDefinition,
+} from './config/RelicsCatalog';
+
+// ============================================================================
+// ROGUELIKE CAMPAIGN DEFINITIONS (Sprint 3)
+// ============================================================================
+export type CampaignNodeType =
+  | 'BATTLE'
+  | 'ELITE'
+  | 'MERCHANT'
+  | 'CAMPFIRE'
+  | 'EVENT'
+  | 'BOSS';
+
+export interface CampaignNode {
+  readonly id: string;
+  readonly layer: number; // 0..6
+  readonly type: CampaignNodeType;
+  readonly name: string;
+  readonly outgoingNodeIds: string[];
+  readonly enemyProfile?: AIProfileId;
+  readonly eventId?: string;
+}
+
+export interface CampaignState {
+  readonly runSeed: number;
+  readonly act: number; // 1 in MVP
+  currentLayer: number; // 0..6
+  currentNodeId: string;
+  visitedNodeIds: string[];
+
+  // Vital persistence
+  playerCitadelHp: number; // Max 2500
+  campaignGold: number; // Persistent campaign gold (starts at 50g)
+
+  // Relics & Combat Modifiers
+  activeRelicIds: import('./config/RelicsCatalog').RelicTypeId[];
+  campaignDamageBonus: number; // Accumulated at Field Forge (+0.10 per use)
+  nextBattleBonusGold: number; // Temporary opening gold bonus (+50g / +100g)
+
+  isRunOver: boolean;
+  isVictory: boolean;
+}
+
+export type CampfireActionId = 'REPAIR' | 'FORGE' | 'INSPIRATION';
+export type CampaignEventChoiceId = 'A' | 'B';
+
+export interface CampaignEventChoice {
+  readonly text: string;
+  readonly description: string;
+  readonly goldCost?: number;
+  readonly citadelHpCost?: number;
+}
+
+export interface CampaignEventDefinition {
+  readonly id: string;
+  readonly title: string;
+  readonly narrative: string;
+  readonly choiceA: CampaignEventChoice;
+  readonly choiceB: CampaignEventChoice;
+}
+

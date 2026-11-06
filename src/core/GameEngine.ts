@@ -11,6 +11,7 @@ import {
   GameStateSnapshot,
   GreekFireHazard,
   AIProfileId,
+  RelicTypeId,
 } from './types';
 import { SeededRNG } from './prng/SeededRNG';
 import { DomainEventBus } from './events/DomainEventBus';
@@ -61,6 +62,10 @@ export interface GameEngineOptions {
   initialPlayerGold?: number;
   initialEnemyGold?: number;
   aiProfile?: AIProfileId | null;
+  activeRelics?: RelicTypeId[];
+  playerDamageBonus?: number;
+  initialPlayerCitadelHp?: number;
+  enemyUnitHpMultiplier?: number;
 }
 
 export class GameEngine {
@@ -69,6 +74,9 @@ export class GameEngine {
   private winnerTeam: TeamId | null = null;
   private unitIdCounter = 0;
   private hazardIdCounter = 0;
+  private playerPaladins: UnitState[] = [];
+  private enemyPaladins: UnitState[] = [];
+  private paladinsInitialized = false;
 
   public readonly rng: SeededRNG;
   public readonly eventBus: DomainEventBus;
@@ -91,7 +99,7 @@ export class GameEngine {
       PLAYER: {
         team: 'PLAYER',
         x: PLAYER_CITADEL_X,
-        currentHp: CITADEL_MAX_HP,
+        currentHp: options.initialPlayerCitadelHp ?? CITADEL_MAX_HP,
         maxHp: CITADEL_MAX_HP,
         armorType: CITADEL_ARMOR_TYPE,
         flatReduction: CITADEL_FLAT_REDUCTION,
@@ -213,7 +221,9 @@ export class GameEngine {
     this.economy[team].gold -= cost;
     slot.structureId = structureId;
     slot.totalInvestedGold = cost;
-    slot.totalSpawnCooldownTicks = Math.round(def.spawnCooldownSec * TICK_RATE);
+    const isFebrile = team === 'PLAYER' && this.hasRelic('relic_febrile_production');
+    const cooldownMultiplier = isFebrile ? 0.85 : 1.0;
+    slot.totalSpawnCooldownTicks = Math.max(1, Math.round(def.spawnCooldownSec * cooldownMultiplier * TICK_RATE));
     slot.currentSpawnCooldownTicks = slot.totalSpawnCooldownTicks;
 
     this.eventBus.emit('StructureBuilt', {
@@ -248,7 +258,9 @@ export class GameEngine {
     slot.totalInvestedGold += upgradeCost;
 
     // Preserve current spawn timer countdown without resetting
-    const newTotalCooldown = Math.round(nextDef.spawnCooldownSec * TICK_RATE);
+    const isFebrile = team === 'PLAYER' && this.hasRelic('relic_febrile_production');
+    const cooldownMultiplier = isFebrile ? 0.85 : 1.0;
+    const newTotalCooldown = Math.max(1, Math.round(nextDef.spawnCooldownSec * cooldownMultiplier * TICK_RATE));
     slot.currentSpawnCooldownTicks = Math.min(slot.currentSpawnCooldownTicks, newTotalCooldown);
     slot.totalSpawnCooldownTicks = newTotalCooldown;
 
@@ -311,11 +323,23 @@ export class GameEngine {
 
     this.tickCount++;
 
+    // [P0-3] Refresh alive paladins cache once at the start of tick for high-performance Devotion Aura queries
+    this.refreshAlivePaladins();
+
     // 0. Update Solar Flame debuffs on units
     for (const unit of this.units) {
       if (unit.solarFlameTicksRemaining > 0) {
         unit.solarFlameTicksRemaining--;
       }
+    }
+
+    // Process relic_citadel_mana_heart every 600 ticks (30.0s)
+    if (
+      this.tickCount > 0 &&
+      this.tickCount % 600 === 0 &&
+      this.hasRelic('relic_citadel_mana_heart')
+    ) {
+      this.triggerCitadelManaHeart();
     }
 
     // 1. Process Economy Income Cycles (every 5.0 seconds = 100 ticks)
@@ -389,14 +413,22 @@ export class GameEngine {
     const spawnX = team === 'PLAYER' ? PLAYER_CITADEL_X : ENEMY_CITADEL_X;
     const spawnY = this.rng.nextInt(SPAWN_MIN_Y, SPAWN_MAX_Y);
 
+    // Apply relic_febrile_production (-10% Max HP) or enemyUnitHpMultiplier (+20% for Elite)
+    let maxHp = unitDef.maxHp;
+    if (team === 'PLAYER' && this.hasRelic('relic_febrile_production')) {
+      maxHp = Math.max(1, Math.floor(unitDef.maxHp * 0.9));
+    } else if (team === 'ENEMY' && this.options.enemyUnitHpMultiplier) {
+      maxHp = Math.max(1, Math.floor(unitDef.maxHp * this.options.enemyUnitHpMultiplier));
+    }
+
     const unit: UnitState = {
       id: unitId,
       typeId,
       team,
       x: spawnX,
       y: spawnY,
-      currentHp: unitDef.maxHp,
-      maxHp: unitDef.maxHp,
+      currentHp: maxHp,
+      maxHp,
       targetUnitId: null,
       isTargetingCitadel: false,
       attackCooldownTicks: 0,
@@ -410,6 +442,13 @@ export class GameEngine {
     };
 
     this.units.push(unit);
+    if (typeId === 'unit_dawn_paladin') {
+      if (team === 'PLAYER') {
+        this.playerPaladins.push(unit);
+      } else {
+        this.enemyPaladins.push(unit);
+      }
+    }
 
     this.eventBus.emit('UnitSpawned', {
       type: typeId,
@@ -451,17 +490,264 @@ export class GameEngine {
   }
 
   /**
-   * Helper to check if a unit is under the protection of a friendly Dawn Paladin's Devotion Aura.
+   * [P0-3] Refresh alive paladins list once per tick partitioned by team.
+   */
+  public refreshAlivePaladins(): void {
+    this.playerPaladins = [];
+    this.enemyPaladins = [];
+    for (let i = 0; i < this.units.length; i++) {
+      const u = this.units[i];
+      if (u.currentHp > 0 && u.typeId === 'unit_dawn_paladin') {
+        if (u.team === 'PLAYER') {
+          this.playerPaladins.push(u);
+        } else {
+          this.enemyPaladins.push(u);
+        }
+      }
+    }
+    this.paladinsInitialized = true;
+  }
+
+  /**
+   * [P0-3] Fast aura query against pre-filtered short list of alive Paladins of same team.
    */
   public hasPaladinAura(unit: UnitState): boolean {
-    return this.units.some(
-      (ally) =>
-        ally.team === unit.team &&
-        ally.currentHp > 0 &&
-        ally.typeId === 'unit_dawn_paladin' &&
-        (ally.x - unit.x) ** 2 + (ally.y - unit.y) ** 2 <=
-          DAWN_PALADIN_AURA_RADIUS_PX * DAWN_PALADIN_AURA_RADIUS_PX
-    );
+    if (!this.paladinsInitialized) {
+      this.refreshAlivePaladins();
+    }
+    const list = unit.team === 'PLAYER' ? this.playerPaladins : this.enemyPaladins;
+    const len = list.length;
+    if (len === 0) return false;
+
+    const r2 = DAWN_PALADIN_AURA_RADIUS_PX * DAWN_PALADIN_AURA_RADIUS_PX;
+    const ux = unit.x;
+    const uy = unit.y;
+
+    for (let i = 0; i < len; i++) {
+      const paladin = list[i];
+      if (paladin.currentHp > 0) {
+        const dx = paladin.x - ux;
+        const dy = paladin.y - uy;
+        if (dx * dx + dy * dy <= r2) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Helper to check if an active relic is enabled for the player.
+   */
+  public hasRelic(id: RelicTypeId): boolean {
+    return this.options.activeRelics?.includes(id) ?? false;
+  }
+
+  /**
+   * Helper to calculate global damage multiplier for PLAYER troops (Field Forge + Blood and Soil banner).
+   */
+  public getPlayerDamageMultiplier(): number {
+    let mult = 1.0;
+    if (this.options.playerDamageBonus) {
+      mult *= 1 + this.options.playerDamageBonus;
+    }
+    if (this.hasRelic('relic_blood_and_soil_banner') && this.frontline.frontlineX > 1200) {
+      mult *= 1.2;
+    }
+    return mult;
+  }
+
+  /**
+   * Handles unit death, applying gold bounties (doubled with relic_royal_war_tithe) and martyr triggers.
+   */
+  private handleUnitDeath(
+    victim: UnitState,
+    killerTeam: TeamId,
+    killerId: string,
+    damageType: DamageType
+  ): void {
+    const def = getUnitDefinition(victim.typeId);
+    let bounty = def.bountyGold;
+
+    // relic_royal_war_tithe: double bounty when PLAYER kills ENEMY unit with MAGIC or SIEGE
+    if (
+      killerTeam === 'PLAYER' &&
+      victim.team === 'ENEMY' &&
+      this.hasRelic('relic_royal_war_tithe') &&
+      (damageType === 'MAGIC' || damageType === 'SIEGE')
+    ) {
+      bounty *= 2;
+    }
+
+    this.economy[killerTeam].gold += bounty;
+    this.eventBus.emit('UnitDied', {
+      unitId: victim.id,
+      killerId,
+      bountyAwarded: bounty,
+      x: victim.x,
+      y: victim.y,
+      tick: this.tickCount,
+    });
+
+    // relic_solar_martyrdom: radial 80px AoE causing 60 Magic Damage on PLAYER melee death
+    if (
+      victim.team === 'PLAYER' &&
+      this.hasRelic('relic_solar_martyrdom') &&
+      def.isMelee
+    ) {
+      this.triggerSolarMartyrdom(victim.x, victim.y);
+    }
+  }
+
+  /**
+   * Triggers relic_solar_martyrdom 80px radial explosion on melee death.
+   */
+  private triggerSolarMartyrdom(deathX: number, deathY: number): void {
+    const r2 = 80 * 80;
+    const affectedEnemies = this.units.filter((u) => {
+      if (u.team !== 'ENEMY' || u.currentHp <= 0) return false;
+      const dx = u.x - deathX;
+      const dy = u.y - deathY;
+      return dx * dx + dy * dy <= r2;
+    });
+
+    for (const enemy of affectedEnemies) {
+      const def = getUnitDefinition(enemy.typeId);
+      const aura = this.hasPaladinAura(enemy);
+      const dmg = CombatResolver.calculateEffectiveDamage({
+        baseDamage: 60,
+        damageType: 'MAGIC',
+        defenderArmorType: def.armorType,
+        defenderFlatReduction: def.flatReduction,
+        defenderTypeId: enemy.typeId,
+        hasPaladinAura: aura,
+        applyPassives: true,
+      });
+
+      enemy.currentHp = Math.max(0, enemy.currentHp - dmg);
+
+      this.eventBus.emit('UnitAttacked', {
+        attackerId: 'relic_solar_martyrdom',
+        targetId: enemy.id,
+        damage: dmg,
+        isCritical: false,
+        tick: this.tickCount,
+      });
+
+      if (enemy.currentHp <= 0) {
+        this.handleUnitDeath(enemy, 'PLAYER', 'relic_solar_martyrdom', 'MAGIC');
+      }
+    }
+  }
+
+  /**
+   * Triggers relic_flaming_dawn_bolts 70px fiery explosion on every 5th shooter attack.
+   */
+  private triggerFlamingDawnBolts(
+    impactX: number,
+    impactY: number,
+    isTargetCitadel: boolean,
+    attackerId: string
+  ): void {
+    const r2 = 70 * 70;
+    const affectedEnemies = this.units.filter((u) => {
+      if (u.team !== 'ENEMY' || u.currentHp <= 0) return false;
+      const dx = u.x - impactX;
+      const dy = u.y - impactY;
+      return dx * dx + dy * dy <= r2;
+    });
+
+    for (const enemy of affectedEnemies) {
+      const def = getUnitDefinition(enemy.typeId);
+      const aura = this.hasPaladinAura(enemy);
+      const dmg = CombatResolver.calculateEffectiveDamage({
+        baseDamage: 160,
+        damageType: 'MAGIC',
+        defenderArmorType: def.armorType,
+        defenderFlatReduction: def.flatReduction,
+        defenderTypeId: enemy.typeId,
+        hasPaladinAura: aura,
+        applyPassives: true,
+      });
+
+      enemy.currentHp = Math.max(0, enemy.currentHp - dmg);
+
+      this.eventBus.emit('UnitAttacked', {
+        attackerId,
+        targetId: enemy.id,
+        damage: dmg,
+        isCritical: false,
+        tick: this.tickCount,
+      });
+
+      if (enemy.currentHp <= 0) {
+        this.handleUnitDeath(enemy, 'PLAYER', attackerId, 'MAGIC');
+      }
+    }
+
+    // Damage enemy citadel if targeted or within 70px
+    const enemyCitadel = this.citadels.ENEMY;
+    if (isTargetCitadel || (enemyCitadel.x - impactX) ** 2 <= r2) {
+      const citadelDmg = CombatResolver.calculateEffectiveDamage({
+        baseDamage: 160,
+        damageType: 'MAGIC',
+        defenderArmorType: enemyCitadel.armorType,
+        defenderFlatReduction: enemyCitadel.flatReduction,
+        applyPassives: true,
+      });
+
+      enemyCitadel.currentHp = Math.max(0, enemyCitadel.currentHp - citadelDmg);
+
+      this.eventBus.emit('NexusDamaged', {
+        team: 'ENEMY',
+        currentHp: enemyCitadel.currentHp,
+        maxHp: enemyCitadel.maxHp,
+        damage: citadelDmg,
+        tick: this.tickCount,
+      });
+    }
+  }
+
+  /**
+   * Triggers relic_citadel_mana_heart periodic wave (+120 HP heal to allies, 80 Magic Damage to enemies).
+   */
+  private triggerCitadelManaHeart(): void {
+    // 1. Heal all alive PLAYER units +120 HP (Citadel not healed)
+    for (const unit of this.units) {
+      if (unit.team === 'PLAYER' && unit.currentHp > 0) {
+        unit.currentHp = Math.min(unit.maxHp, unit.currentHp + 120);
+      }
+    }
+
+    // 2. Pulse 80 Magic Damage to all alive ENEMY mobile units (Citadel not damaged)
+    const aliveEnemies = this.units.filter((u) => u.team === 'ENEMY' && u.currentHp > 0);
+    for (const enemy of aliveEnemies) {
+      const def = getUnitDefinition(enemy.typeId);
+      const aura = this.hasPaladinAura(enemy);
+      const dmg = CombatResolver.calculateEffectiveDamage({
+        baseDamage: 80,
+        damageType: 'MAGIC',
+        defenderArmorType: def.armorType,
+        defenderFlatReduction: def.flatReduction,
+        defenderTypeId: enemy.typeId,
+        hasPaladinAura: aura,
+        applyPassives: true,
+      });
+
+      enemy.currentHp = Math.max(0, enemy.currentHp - dmg);
+
+      this.eventBus.emit('UnitAttacked', {
+        attackerId: 'relic_citadel_mana_heart',
+        targetId: enemy.id,
+        damage: dmg,
+        isCritical: false,
+        tick: this.tickCount,
+      });
+
+      if (enemy.currentHp <= 0) {
+        this.handleUnitDeath(enemy, 'PLAYER', 'relic_citadel_mana_heart', 'MAGIC');
+      }
+    }
   }
 
   /**
@@ -494,6 +780,14 @@ export class GameEngine {
 
       if (unit.attackCooldownTicks <= 0) {
         const unitDef = getUnitDefinition(unit.typeId);
+        const attackerMultiplier = unit.team === 'PLAYER' ? this.getPlayerDamageMultiplier() : 1.0;
+        const isShooter =
+          unit.typeId === 'unit_longbowman' || unit.typeId === 'unit_siege_crossbowman';
+        const isFlamingBoltsProc =
+          unit.team === 'PLAYER' &&
+          isShooter &&
+          this.hasRelic('relic_flaming_dawn_bolts') &&
+          (unit.attackCount + 1) % 5 === 0;
 
         // 1. Attack against an enemy Unit
         if (unit.targetUnitId !== null) {
@@ -501,6 +795,10 @@ export class GameEngine {
           if (target) {
             const targetDef = getUnitDefinition(target.typeId);
             const targetHasAura = this.hasPaladinAura(target);
+            const targetHeavyPlating =
+              target.team === 'PLAYER' && this.hasRelic('relic_blessed_heavy_plating');
+            const unitHasDawnCharge =
+              unit.team === 'PLAYER' && this.hasRelic('relic_triumphant_dawn_charge');
 
             // [P0-3] Royal Knight Smashing Strike every 3rd attack
             const isSmash =
@@ -517,47 +815,46 @@ export class GameEngine {
 
             if (isSupernova) {
               // Supernova: 100px AoE with 110 Magic Damage base applied to all enemies in area
-              const supernovaTargets = this.units.filter((u) => {
-                if (u.team === unit.team || u.currentHp <= 0) return false;
-                const dx = u.x - target.x;
-                const dy = u.y - target.y;
-                return dx * dx + dy * dy <= ARCHMAGE_SUPERNOVA_RADIUS_PX * ARCHMAGE_SUPERNOVA_RADIUS_PX;
-              });
+              const snR2 = ARCHMAGE_SUPERNOVA_RADIUS_PX * ARCHMAGE_SUPERNOVA_RADIUS_PX;
+              const tx = target.x;
+              const ty = target.y;
 
-              for (const snTarget of supernovaTargets) {
-                const snDef = getUnitDefinition(snTarget.typeId);
-                const snAura = this.hasPaladinAura(snTarget);
-                const snDmg = CombatResolver.calculateEffectiveDamage({
-                  baseDamage: ARCHMAGE_SUPERNOVA_BASE_DAMAGE,
-                  damageType: 'MAGIC',
-                  defenderArmorType: snDef.armorType,
-                  defenderFlatReduction: snDef.flatReduction,
-                  defenderTypeId: snTarget.typeId,
-                  hasPaladinAura: snAura,
-                  applyPassives: true,
-                });
+              for (let i = 0; i < this.units.length; i++) {
+                const snTarget = this.units[i];
+                if (snTarget.team === unit.team || snTarget.currentHp <= 0) continue;
+                const dx = snTarget.x - tx;
+                const dy = snTarget.y - ty;
+                if (dx * dx + dy * dy <= snR2) {
+                  const snDef = getUnitDefinition(snTarget.typeId);
+                  const snAura = this.hasPaladinAura(snTarget);
+                  const snHeavyPlating =
+                    snTarget.team === 'PLAYER' && this.hasRelic('relic_blessed_heavy_plating');
+                  const snDmg = CombatResolver.calculateEffectiveDamage({
+                    baseDamage: ARCHMAGE_SUPERNOVA_BASE_DAMAGE,
+                    damageType: 'MAGIC',
+                    defenderArmorType: snDef.armorType,
+                    defenderFlatReduction: snDef.flatReduction,
+                    defenderTypeId: snTarget.typeId,
+                    relicDamageMultiplier: attackerMultiplier,
+                    hasPaladinAura: snAura,
+                    hasBlessedHeavyPlating: snHeavyPlating,
+                    applyPassives: true,
+                  });
 
-                snTarget.currentHp = Math.max(0, snTarget.currentHp - snDmg);
-                snTarget.solarFlameTicksRemaining = SOLAR_FLAME_DURATION_TICKS; // 60 ticks (3.0s)
+                  snTarget.currentHp = Math.max(0, snTarget.currentHp - snDmg);
+                  snTarget.solarFlameTicksRemaining = SOLAR_FLAME_DURATION_TICKS; // 60 ticks (3.0s)
 
-                this.eventBus.emit('UnitAttacked', {
-                  attackerId: unit.id,
-                  targetId: snTarget.id,
-                  damage: snDmg,
-                  isCritical: false,
-                  tick: this.tickCount,
-                });
-
-                if (snTarget.currentHp <= 0) {
-                  this.economy[unit.team].gold += snDef.bountyGold;
-                  this.eventBus.emit('UnitDied', {
-                    unitId: snTarget.id,
-                    killerId: unit.id,
-                    bountyAwarded: snDef.bountyGold,
-                    x: snTarget.x,
-                    y: snTarget.y,
+                  this.eventBus.emit('UnitAttacked', {
+                    attackerId: unit.id,
+                    targetId: snTarget.id,
+                    damage: snDmg,
+                    isCritical: false,
                     tick: this.tickCount,
                   });
+
+                  if (snTarget.currentHp <= 0) {
+                    this.handleUnitDeath(snTarget, unit.team, unit.id, 'MAGIC');
+                  }
                 }
               }
 
@@ -574,10 +871,13 @@ export class GameEngine {
                 defenderTypeId: target.typeId,
                 defenderMaxHp: target.maxHp,
                 defenderCurrentHp: target.currentHp,
+                relicDamageMultiplier: attackerMultiplier,
                 isRangedAttack: !unitDef.isMelee,
                 isSmashAttack: isSmash,
                 isChargeAttack: isCharge,
                 hasPaladinAura: targetHasAura,
+                hasBlessedHeavyPlating: targetHeavyPlating,
+                hasTriumphantDawnCharge: unitHasDawnCharge,
                 applyPassives: true,
               });
 
@@ -601,9 +901,16 @@ export class GameEngine {
               // Mounted unit charge resolution
               if (isCharge) {
                 unit.hasCharged = true;
-                if (unit.typeId === 'unit_dawn_paladin') {
+                if (unitHasDawnCharge) {
+                  target.stunTicksRemaining = 30; // 1.5s stun from epic relic
+                } else if (unit.typeId === 'unit_dawn_paladin') {
                   target.stunTicksRemaining = DAWN_PALADIN_STUN_TICKS; // 20 ticks (1.0s)
                 }
+              }
+
+              // relic_flaming_dawn_bolts: Proc 70px fiery explosion on 5th attack
+              if (isFlamingBoltsProc) {
+                this.triggerFlamingDawnBolts(target.x, target.y, false, unit.id);
               }
 
               // Mobile Ballista: Piercing linear bolt (+1 additional enemy behind target)
@@ -633,6 +940,8 @@ export class GameEngine {
                   const secondTarget = potentialSecondTargets[0];
                   const secDef = getUnitDefinition(secondTarget.typeId);
                   const secAura = this.hasPaladinAura(secondTarget);
+                  const secHeavyPlating =
+                    secondTarget.team === 'PLAYER' && this.hasRelic('relic_blessed_heavy_plating');
 
                   const secDmg = CombatResolver.calculateEffectiveDamage({
                     baseDamage: unitDef.baseDamage,
@@ -640,7 +949,9 @@ export class GameEngine {
                     defenderArmorType: secDef.armorType,
                     defenderFlatReduction: secDef.flatReduction,
                     defenderTypeId: secondTarget.typeId,
+                    relicDamageMultiplier: attackerMultiplier,
                     hasPaladinAura: secAura,
+                    hasBlessedHeavyPlating: secHeavyPlating,
                     applyPassives: true,
                   });
 
@@ -655,15 +966,7 @@ export class GameEngine {
                   });
 
                   if (secondTarget.currentHp <= 0) {
-                    this.economy[unit.team].gold += secDef.bountyGold;
-                    this.eventBus.emit('UnitDied', {
-                      unitId: secondTarget.id,
-                      killerId: unit.id,
-                      bountyAwarded: secDef.bountyGold,
-                      x: secondTarget.x,
-                      y: secondTarget.y,
-                      tick: this.tickCount,
-                    });
+                    this.handleUnitDeath(secondTarget, unit.team, unit.id, unitDef.damageType);
                   }
                 }
               }
@@ -709,16 +1012,7 @@ export class GameEngine {
 
               // Check target death
               if (target.currentHp <= 0) {
-                const bounty = targetDef.bountyGold;
-                this.economy[unit.team].gold += bounty;
-                this.eventBus.emit('UnitDied', {
-                  unitId: target.id,
-                  killerId: unit.id,
-                  bountyAwarded: bounty,
-                  x: target.x,
-                  y: target.y,
-                  tick: this.tickCount,
-                });
+                this.handleUnitDeath(target, unit.team, unit.id, unitDef.damageType);
               }
 
               // Set attack cooldown
@@ -735,6 +1029,8 @@ export class GameEngine {
             const isCharge =
               !unit.hasCharged &&
               (unit.typeId === 'unit_mounted_spearman' || unit.typeId === 'unit_dawn_paladin');
+            const unitHasDawnCharge =
+              unit.team === 'PLAYER' && this.hasRelic('relic_triumphant_dawn_charge');
             const isSupernova =
               unit.typeId === 'unit_solar_archmage' && (unit.attackCount + 1) % 4 === 0;
 
@@ -746,6 +1042,7 @@ export class GameEngine {
                 defenderArmorType: enemyCitadel.armorType,
                 defenderFlatReduction: enemyCitadel.flatReduction,
                 attackerTypeId: unit.typeId,
+                relicDamageMultiplier: attackerMultiplier,
                 isRangedAttack: true,
                 applyPassives: true,
               });
@@ -772,13 +1069,17 @@ export class GameEngine {
               for (const nb of nearbyEnemies) {
                 const nbDef = getUnitDefinition(nb.typeId);
                 const nbAura = this.hasPaladinAura(nb);
+                const nbHeavyPlating =
+                  nb.team === 'PLAYER' && this.hasRelic('relic_blessed_heavy_plating');
                 const nbDmg = CombatResolver.calculateEffectiveDamage({
                   baseDamage: ARCHMAGE_SUPERNOVA_BASE_DAMAGE,
                   damageType: 'MAGIC',
                   defenderArmorType: nbDef.armorType,
                   defenderFlatReduction: nbDef.flatReduction,
                   defenderTypeId: nb.typeId,
+                  relicDamageMultiplier: attackerMultiplier,
                   hasPaladinAura: nbAura,
+                  hasBlessedHeavyPlating: nbHeavyPlating,
                   applyPassives: true,
                 });
 
@@ -794,15 +1095,7 @@ export class GameEngine {
                 });
 
                 if (nb.currentHp <= 0) {
-                  this.economy[unit.team].gold += nbDef.bountyGold;
-                  this.eventBus.emit('UnitDied', {
-                    unitId: nb.id,
-                    killerId: unit.id,
-                    bountyAwarded: nbDef.bountyGold,
-                    x: nb.x,
-                    y: nb.y,
-                    tick: this.tickCount,
-                  });
+                  this.handleUnitDeath(nb, unit.team, unit.id, 'MAGIC');
                 }
               }
 
@@ -814,9 +1107,11 @@ export class GameEngine {
                 defenderArmorType: enemyCitadel.armorType,
                 defenderFlatReduction: enemyCitadel.flatReduction,
                 attackerTypeId: unit.typeId,
+                relicDamageMultiplier: attackerMultiplier,
                 isRangedAttack: !unitDef.isMelee,
                 isSmashAttack: isSmash,
                 isChargeAttack: isCharge,
+                hasTriumphantDawnCharge: unitHasDawnCharge,
                 applyPassives: true,
               });
 
@@ -825,6 +1120,11 @@ export class GameEngine {
 
               if (isCharge) {
                 unit.hasCharged = true;
+              }
+
+              // relic_flaming_dawn_bolts: Proc 70px fiery explosion on Citadel
+              if (isFlamingBoltsProc) {
+                this.triggerFlamingDawnBolts(enemyCitadel.x, unit.y, true, unit.id);
               }
 
               // Greek fire catapult splash and hazard at citadel impact
@@ -889,47 +1189,45 @@ export class GameEngine {
     baseDamage: number,
     damageType: DamageType
   ): void {
-    const splashTargets = this.units.filter((u) => {
-      if (u.team === attacker.team || u.currentHp <= 0) return false;
-      if (primaryTargetId !== null && u.id === primaryTargetId) return false;
-      const dx = u.x - centerX;
-      const dy = u.y - centerY;
-      return dx * dx + dy * dy <= radiusPx * radiusPx;
-    });
+    const r2 = radiusPx * radiusPx;
+    const attackerMultiplier = attacker.team === 'PLAYER' ? this.getPlayerDamageMultiplier() : 1.0;
+    const splashBase = Math.floor(baseDamage * 0.5);
 
-    for (const splTarget of splashTargets) {
-      const def = getUnitDefinition(splTarget.typeId);
-      const splashBase = Math.floor(baseDamage * 0.5);
-      const splashDmg = CombatResolver.calculateEffectiveDamage({
-        baseDamage: splashBase,
-        damageType,
-        defenderArmorType: def.armorType,
-        defenderFlatReduction: def.flatReduction,
-        defenderTypeId: splTarget.typeId,
-        hasPaladinAura: this.hasPaladinAura(splTarget),
-        applyPassives: true,
-      });
+    for (let i = 0; i < this.units.length; i++) {
+      const splTarget = this.units[i];
+      if (splTarget.team === attacker.team || splTarget.currentHp <= 0) continue;
+      if (primaryTargetId !== null && splTarget.id === primaryTargetId) continue;
+      const dx = splTarget.x - centerX;
+      const dy = splTarget.y - centerY;
+      if (dx * dx + dy * dy <= r2) {
+        const def = getUnitDefinition(splTarget.typeId);
+        const splHeavyPlating =
+          splTarget.team === 'PLAYER' && this.hasRelic('relic_blessed_heavy_plating');
+        const splashDmg = CombatResolver.calculateEffectiveDamage({
+          baseDamage: splashBase,
+          damageType,
+          defenderArmorType: def.armorType,
+          defenderFlatReduction: def.flatReduction,
+          defenderTypeId: splTarget.typeId,
+          relicDamageMultiplier: attackerMultiplier,
+          hasPaladinAura: this.hasPaladinAura(splTarget),
+          hasBlessedHeavyPlating: splHeavyPlating,
+          applyPassives: true,
+        });
 
-      splTarget.currentHp = Math.max(0, splTarget.currentHp - splashDmg);
+        splTarget.currentHp = Math.max(0, splTarget.currentHp - splashDmg);
 
-      this.eventBus.emit('UnitAttacked', {
-        attackerId: attacker.id,
-        targetId: splTarget.id,
-        damage: splashDmg,
-        isCritical: false,
-        tick: this.tickCount,
-      });
-
-      if (splTarget.currentHp <= 0) {
-        this.economy[attacker.team].gold += def.bountyGold;
-        this.eventBus.emit('UnitDied', {
-          unitId: splTarget.id,
-          killerId: attacker.id,
-          bountyAwarded: def.bountyGold,
-          x: splTarget.x,
-          y: splTarget.y,
+        this.eventBus.emit('UnitAttacked', {
+          attackerId: attacker.id,
+          targetId: splTarget.id,
+          damage: splashDmg,
+          isCritical: false,
           tick: this.tickCount,
         });
+
+        if (splTarget.currentHp <= 0) {
+          this.handleUnitDeath(splTarget, attacker.team, attacker.id, damageType);
+        }
       }
     }
   }
@@ -939,50 +1237,49 @@ export class GameEngine {
    * Citadel is strictly immune to ground hazard pools.
    */
   private updateHazards(): void {
-    for (const hazard of this.hazards) {
+    for (let h = 0; h < this.hazards.length; h++) {
+      const hazard = this.hazards[h];
       hazard.ticksRemaining--;
 
       // Pulse damage every 20 ticks (e.g. 60, 40, 20, 0)
       if (hazard.ticksRemaining % hazard.tickInterval === 0) {
-        const affectedUnits = this.units.filter((u) => {
-          if (u.team === hazard.team || u.currentHp <= 0) return false;
-          const dx = u.x - hazard.x;
-          const dy = u.y - hazard.y;
-          return dx * dx + dy * dy <= hazard.radiusPx * hazard.radiusPx;
-        });
+        const r2 = hazard.radiusPx * hazard.radiusPx;
+        const hx = hazard.x;
+        const hy = hazard.y;
 
-        for (const target of affectedUnits) {
-          const def = getUnitDefinition(target.typeId);
-          const damage = CombatResolver.calculateEffectiveDamage({
-            baseDamage: hazard.baseMagicDamage,
-            damageType: 'MAGIC',
-            defenderArmorType: def.armorType,
-            defenderFlatReduction: def.flatReduction,
-            defenderTypeId: target.typeId,
-            hasPaladinAura: this.hasPaladinAura(target),
-            applyPassives: true,
-          });
+        for (let i = 0; i < this.units.length; i++) {
+          const target = this.units[i];
+          if (target.team === hazard.team || target.currentHp <= 0) continue;
+          const dx = target.x - hx;
+          const dy = target.y - hy;
+          if (dx * dx + dy * dy <= r2) {
+            const def = getUnitDefinition(target.typeId);
+            const targetHeavyPlating =
+              target.team === 'PLAYER' && this.hasRelic('relic_blessed_heavy_plating');
+            const damage = CombatResolver.calculateEffectiveDamage({
+              baseDamage: hazard.baseMagicDamage,
+              damageType: 'MAGIC',
+              defenderArmorType: def.armorType,
+              defenderFlatReduction: def.flatReduction,
+              defenderTypeId: target.typeId,
+              hasPaladinAura: this.hasPaladinAura(target),
+              hasBlessedHeavyPlating: targetHeavyPlating,
+              applyPassives: true,
+            });
 
-          target.currentHp = Math.max(0, target.currentHp - damage);
+            target.currentHp = Math.max(0, target.currentHp - damage);
 
-          this.eventBus.emit('UnitAttacked', {
-            attackerId: hazard.id,
-            targetId: target.id,
-            damage,
-            isCritical: false,
-            tick: this.tickCount,
-          });
-
-          if (target.currentHp <= 0) {
-            this.economy[hazard.team].gold += def.bountyGold;
-            this.eventBus.emit('UnitDied', {
-              unitId: target.id,
-              killerId: hazard.id,
-              bountyAwarded: def.bountyGold,
-              x: target.x,
-              y: target.y,
+            this.eventBus.emit('UnitAttacked', {
+              attackerId: hazard.id,
+              targetId: target.id,
+              damage,
+              isCritical: false,
               tick: this.tickCount,
             });
+
+            if (target.currentHp <= 0) {
+              this.handleUnitDeath(target, hazard.team, hazard.id, 'MAGIC');
+            }
           }
         }
       }
@@ -1015,16 +1312,12 @@ export class GameEngine {
         });
 
         if (target.currentHp <= 0) {
-          const targetDef = getUnitDefinition(target.typeId);
-          this.economy[shot.attackerCitadelTeam].gold += targetDef.bountyGold;
-          this.eventBus.emit('UnitDied', {
-            unitId: target.id,
-            killerId: `citadel_${shot.attackerCitadelTeam.toLowerCase()}`,
-            bountyAwarded: targetDef.bountyGold,
-            x: target.x,
-            y: target.y,
-            tick: this.tickCount,
-          });
+          this.handleUnitDeath(
+            target,
+            shot.attackerCitadelTeam,
+            `citadel_${shot.attackerCitadelTeam.toLowerCase()}`,
+            'SIEGE'
+          );
         }
       }
     }

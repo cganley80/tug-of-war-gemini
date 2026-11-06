@@ -16,6 +16,8 @@ export interface DamageCalculationParams {
   readonly isChargeAttack?: boolean;
   readonly isSmashAttack?: boolean; // Royal Knight 3rd attack
   readonly hasPaladinAura?: boolean; // Dawn Paladin Devotion Aura (+1 flat reduction)
+  readonly hasBlessedHeavyPlating?: boolean; // Relic: +2 flat reduction for HEAVY armor vs NORMAL/PIERCING
+  readonly hasTriumphantDawnCharge?: boolean; // Relic: +1.5x charge multiplier for cavalry
   readonly applyPassives?: boolean;
 }
 
@@ -54,6 +56,8 @@ export class CombatResolver {
       isChargeAttack = false,
       isSmashAttack = false,
       hasPaladinAura = false,
+      hasBlessedHeavyPlating = false,
+      hasTriumphantDawnCharge = false,
       applyPassives = false,
     } = params;
 
@@ -61,6 +65,13 @@ export class CombatResolver {
 
     let passiveDamageMultiplier = 1.0;
     let effectiveFlatReduction = defenderFlatReduction + (hasPaladinAura ? 1 : 0);
+    if (
+      hasBlessedHeavyPlating &&
+      defenderArmorType === 'HEAVY' &&
+      (damageType === 'NORMAL' || damageType === 'PIERCING')
+    ) {
+      effectiveFlatReduction += 2;
+    }
     let isCritical = false;
 
     if (applyPassives) {
@@ -87,13 +98,14 @@ export class CombatResolver {
 
       // 4. Mounted Spearman / Dawn Paladin Charge Impact
       if (isChargeAttack) {
+        const bonusCharge = hasTriumphantDawnCharge ? 1.5 : 0.0;
         if (attackerTypeId === 'unit_mounted_spearman') {
-          // 200% damage on first charge attack
-          passiveDamageMultiplier *= 2.0;
+          // 200% (or 350% with relic) damage on first charge attack
+          passiveDamageMultiplier *= (2.0 + bonusCharge);
           isCritical = true;
         } else if (attackerTypeId === 'unit_dawn_paladin') {
-          // 250% damage on first charge attack
-          passiveDamageMultiplier *= 2.5;
+          // 250% (or 400% with relic) damage on first charge attack
+          passiveDamageMultiplier *= (2.5 + bonusCharge);
           isCritical = true;
         }
       }

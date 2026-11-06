@@ -24,38 +24,41 @@ export class TargetingSystem {
     const attackRange = unitDef.attackRangePx;
     const minRange = unitDef.minAttackRangePx ?? 0;
 
-    // Filter alive enemy units
-    const aliveEnemies = allUnits.filter(
-      (candidate) => candidate.team !== unit.team && candidate.currentHp > 0
-    );
+    // Find closest eligible enemy within attack range and minimum range
+    let closestEnemy: UnitState | null = null;
+    let minDistance = Infinity;
 
-    // Filter by attack range and minimum range
-    const eligibleEnemies: Array<{ enemy: UnitState; distance: number }> = [];
+    const r2 = attackRange * attackRange;
+    const minR2 = minRange * minRange;
+    const ux = unit.x;
+    const uy = unit.y;
 
-    for (const enemy of aliveEnemies) {
-      const dx = enemy.x - unit.x;
-      const dy = enemy.y - unit.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+    for (let i = 0; i < allUnits.length; i++) {
+      const enemy = allUnits[i];
+      if (enemy.team === unit.team || enemy.currentHp <= 0) continue;
 
-      if (distance <= attackRange && distance >= minRange) {
-        eligibleEnemies.push({ enemy, distance });
+      const dx = enemy.x - ux;
+      const dy = enemy.y - uy;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq <= r2 && distSq >= minR2) {
+        const dist = Math.sqrt(distSq);
+        if (dist < minDistance - 0.0001) {
+          minDistance = dist;
+          closestEnemy = enemy;
+        } else if (Math.abs(dist - minDistance) <= 0.0001 && closestEnemy) {
+          if (enemy.id.localeCompare(closestEnemy.id) < 0) {
+            closestEnemy = enemy;
+          }
+        }
       }
     }
 
-    if (eligibleEnemies.length > 0) {
-      // Sort by Euclidean distance ascending, with deterministic tie-breaking by id
-      eligibleEnemies.sort((a, b) => {
-        if (Math.abs(a.distance - b.distance) > 0.0001) {
-          return a.distance - b.distance;
-        }
-        return a.enemy.id.localeCompare(b.enemy.id);
-      });
-
-      const chosen = eligibleEnemies[0];
+    if (closestEnemy !== null) {
       return {
-        targetUnitId: chosen.enemy.id,
+        targetUnitId: closestEnemy.id,
         isTargetingCitadel: false,
-        distanceToTarget: chosen.distance,
+        distanceToTarget: minDistance,
       };
     }
 

@@ -2,12 +2,14 @@
  * Tug of War: Citadels of Aethelgard
  * TacticalHud: Complete Tactical HUD & Interactive Control System (Section 4.5 & GOVERNANCE.md)
  * Manages Tug-of-War Gauge, Royal Mine Treasury, 4x3 Allied Grid, AI Selector, and Speed Controls.
+ * Includes P0-2 State Signature Memoization for ultra-stable 60 FPS DOM click handling.
  */
 
 import { GameStateSnapshot, StructureTypeId, AIProfileId } from '../../core/types';
 import { STRUCTURES_CATALOG } from '../../core/config/StructuresCatalog';
 import { MINE_LEVEL_DEFINITIONS, MINE_MAX_LEVEL } from '../../core/config/EconomyConfig';
 import { CITADEL_MAX_HP } from '../../core/config/ArenaConfig';
+import { RelicTypeId, RELICS_CATALOG, RelicRarity } from '../../core/config/RelicsCatalog';
 import { SoundSynthesizer } from '../../renderer/audio/SoundSynthesizer';
 
 export interface TacticalHudCallbacks {
@@ -20,6 +22,8 @@ export interface TacticalHudCallbacks {
   onRestartGame: (profile: AIProfileId) => void;
   onToggleMute: () => void;
   onToggleCamera: () => void;
+  onOpenCampaignMap?: () => void;
+  onResetCampaign?: () => void;
 }
 
 export class TacticalHud {
@@ -28,6 +32,10 @@ export class TacticalHud {
 
   // Track which slot currently has the build menu open (-1 for none)
   private openBuildMenuSlotIndex = -1;
+
+  // P0-2 State Signature Memoization for Allied Construction Grid
+  private static readonly ECONOMIC_THRESHOLDS = [60, 90, 100, 110, 120, 125, 130, 140, 160, 175, 180, 210, 270];
+  private lastGridSignature = '';
 
   // DOM Elements cache
   private elPlayerHp!: HTMLElement;
@@ -38,6 +46,10 @@ export class TacticalHud {
   private elFrontlineStatus!: HTMLElement;
   private elGaugeBar!: HTMLElement;
   private elGaugeContainer!: HTMLElement;
+
+  private elRelicsList!: HTMLElement;
+  private elModifierDamage!: HTMLElement;
+  private elModifierBonusGold!: HTMLElement;
 
   private elGold!: HTMLElement;
   private elMineName!: HTMLElement;
@@ -72,8 +84,8 @@ export class TacticalHud {
 
   private renderInitialMarkup(): void {
     this.container.innerHTML = `
-      <!-- 1. HEADER: Title, AI Opponent Selector & Quick Simulation Controls -->
-      <header style="display:flex; justify-content:space-between; align-items:center; background:#0b0f19; border:1px solid #1e293b; border-radius:8px; padding:10px 16px;">
+      <!-- 1. HEADER: Title, AI Opponent Selector, Campaign Map & Quick Simulation Controls -->
+      <header style="display:flex; justify-content:space-between; align-items:center; background:#0b0f19; border:1px solid #1e293b; border-radius:8px; padding:10px 16px; flex-wrap:wrap; gap:8px;">
         <div style="display:flex; align-items:center; gap:12px;">
           <div style="width:12px; height:12px; border-radius:50%; background:#f59e0b; box-shadow:0 0 10px #f59e0b;"></div>
           <div>
@@ -82,10 +94,18 @@ export class TacticalHud {
           </div>
         </div>
 
-        <div style="display:flex; align-items:center; gap:10px;">
-          <!-- AI Commander Selector -->
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <!-- Campaign Navigation Controls -->
+          <button id="hud-btn-campaign-map" style="background:linear-gradient(135deg, #1e3a8a, #0284c7); color:#fff; border:1px solid #38bdf8; padding:5px 12px; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer; box-shadow:0 0 10px rgba(56,189,248,0.25);">
+            🗺️ Mapa da Campanha (Ato 1)
+          </button>
+          <button id="hud-btn-reset-campaign" style="background:#334155; color:#cbd5e1; border:1px solid #475569; padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer;" title="Reiniciar Campanha Roguelike">
+            🔄 Nova Campanha
+          </button>
+
+          <!-- AI Commander Selector (Skirmish / Testes) -->
           <label style="font-size:12px; color:#cbd5e1; display:flex; align-items:center; gap:6px;">
-            <span>Comandante IA:</span>
+            <span>IA:</span>
             <select id="hud-select-ai" style="background:#1e293b; color:#f8fafc; border:1px solid #475569; padding:5px 8px; border-radius:4px; font-size:12px; cursor:pointer;">
               <option value="AGGRESSIVE">Comandante Valerius (Rush)</option>
               <option value="DEFENSIVE">Grão-Marechal Thorne (Cerco)</option>
@@ -110,8 +130,8 @@ export class TacticalHud {
           <!-- Camera Toggle -->
           <button id="hud-btn-camera" style="background:#1e293b; color:#f8fafc; border:1px solid #475569; padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer;">🎥 Visão Geral</button>
 
-          <!-- Restart -->
-          <button id="hud-btn-restart" style="background:#b91c1c; color:#fff; border:none; padding:5px 12px; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer;">Reiniciar</button>
+          <!-- Restart Quick Match -->
+          <button id="hud-btn-restart" style="background:#b91c1c; color:#fff; border:none; padding:5px 12px; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer;" title="Reiniciar batalha atual">Reiniciar</button>
         </div>
       </header>
 
@@ -163,6 +183,20 @@ export class TacticalHud {
 
           <!-- Dynamic Frontline Marker -->
           <div id="hud-gauge-bar" style="position:absolute; top:0; bottom:0; left:50%; width:6px; background:#f59e0b; border-radius:3px; transform:translateX(-50%); box-shadow:0 0 8px #f59e0b; transition:left 0.08s linear;"></div>
+        </div>
+      </div>
+
+      <!-- 2.5 BANNER DE RELÍQUIAS E MODIFICADORES DE CAMPANHA -->
+      <div id="hud-campaign-banner" style="background:#0b0f19; border:1px solid #1e293b; border-radius:8px; padding:6px 14px; display:flex; justify-content:space-between; align-items:center; font-size:12px; gap:8px;">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span style="color:#f59e0b; font-weight:bold; text-transform:uppercase; font-size:11px; letter-spacing:0.5px;">👑 Relíquias Reais:</span>
+          <div id="hud-relics-list" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+            <span style="color:#64748b; font-style:italic; font-size:11px;">Nenhuma relíquia ativa</span>
+          </div>
+        </div>
+        <div id="hud-campaign-modifiers" style="display:flex; align-items:center; gap:12px; font-size:11px;">
+          <span id="hud-modifier-damage" style="display:none; color:#fbbf24; font-weight:bold;">⚔️ Forja: +0% Dano</span>
+          <span id="hud-modifier-bonus-gold" style="display:none; color:#34d399; font-weight:bold;">💰 Suprimentos: +0g</span>
         </div>
       </div>
 
@@ -253,6 +287,10 @@ export class TacticalHud {
     this.elGaugeBar = document.getElementById('hud-gauge-bar')!;
     this.elGaugeContainer = document.getElementById('hud-gauge-container')!;
 
+    this.elRelicsList = document.getElementById('hud-relics-list')!;
+    this.elModifierDamage = document.getElementById('hud-modifier-damage')!;
+    this.elModifierBonusGold = document.getElementById('hud-modifier-bonus-gold')!;
+
     this.elGold = document.getElementById('hud-gold')!;
     this.elMineName = document.getElementById('hud-mine-name')!;
     this.elMineIncome = document.getElementById('hud-mine-income')!;
@@ -278,6 +316,16 @@ export class TacticalHud {
   // =========================================================================
 
   private bindEvents(): void {
+    // Campaign Map button
+    document.getElementById('hud-btn-campaign-map')?.addEventListener('click', () => {
+      this.callbacks.onOpenCampaignMap?.();
+    });
+
+    // Reset Campaign button
+    document.getElementById('hud-btn-reset-campaign')?.addEventListener('click', () => {
+      this.callbacks.onResetCampaign?.();
+    });
+
     // Speed buttons
     this.elBtnSpeed1x.addEventListener('click', () => this.callbacks.onChangeSpeed(1));
     this.elBtnSpeed2x.addEventListener('click', () => this.callbacks.onChangeSpeed(2));
@@ -294,17 +342,20 @@ export class TacticalHud {
 
     // Restart button
     document.getElementById('hud-btn-restart')?.addEventListener('click', () => {
+      this.invalidateGrid();
       this.callbacks.onRestartGame(this.elSelectAi.value as AIProfileId);
     });
 
     // GameOver restart button
     document.getElementById('hud-btn-gameover-restart')?.addEventListener('click', () => {
       this.elGameOverModal.style.display = 'none';
+      this.invalidateGrid();
       this.callbacks.onRestartGame(this.elSelectAi.value as AIProfileId);
     });
 
     // AI Selector change
     this.elSelectAi.addEventListener('change', () => {
+      this.invalidateGrid();
       this.callbacks.onRestartGame(this.elSelectAi.value as AIProfileId);
     });
 
@@ -315,7 +366,9 @@ export class TacticalHud {
 
     // Click Delegation for Grid actions
     this.elSlotsGrid.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
+      const target = (e.target as HTMLElement).closest('[data-action]') as HTMLElement | null;
+      if (!target) return;
+
       const action = target.getAttribute('data-action');
       const slotIdxAttr = target.getAttribute('data-slot');
 
@@ -324,16 +377,20 @@ export class TacticalHud {
 
       if (action === 'toggle-build-menu') {
         this.openBuildMenuSlotIndex = this.openBuildMenuSlotIndex === slotIndex ? -1 : slotIndex;
+        this.invalidateGrid();
       } else if (action === 'build-structure') {
         const typeId = target.getAttribute('data-type') as StructureTypeId;
         if (typeId) {
           this.callbacks.onBuild(slotIndex, typeId);
           this.openBuildMenuSlotIndex = -1;
+          this.invalidateGrid();
         }
       } else if (action === 'upgrade-structure') {
         this.callbacks.onUpgrade(slotIndex);
+        this.invalidateGrid();
       } else if (action === 'sell-structure') {
         this.callbacks.onSell(slotIndex);
+        this.invalidateGrid();
       }
     });
   }
@@ -354,6 +411,67 @@ export class TacticalHud {
     this.updateEconomyPanel(snapshot);
     this.updateConstructionGrid(snapshot);
     this.updateGameOver(snapshot);
+  }
+
+  // =========================================================================
+  // CAMPAIGN BANNER & MODIFIERS
+  // =========================================================================
+
+  public updateCampaignBanner(
+    activeRelicIds: RelicTypeId[],
+    damageBonus: number,
+    nextBattleBonusGold: number
+  ): void {
+    // 1. Relics Badges
+    if (!activeRelicIds || activeRelicIds.length === 0) {
+      this.elRelicsList.innerHTML = '<span style="color:#64748b; font-style:italic; font-size:11px;">Nenhuma relíquia ativa</span>';
+    } else {
+      let relicsHtml = '';
+      for (const relicId of activeRelicIds) {
+        const def = RELICS_CATALOG[relicId];
+        if (!def) continue;
+
+        const rarityColor = this.getRarityColor(def.rarity);
+        const escapedDesc = `${def.name} (${def.rarity}):\n${def.description}`;
+
+        relicsHtml += `
+          <div title="${escapedDesc}" style="display:inline-flex; align-items:center; gap:4px; background:#1e293b; border:1px solid ${rarityColor}; border-radius:4px; padding:2px 8px; font-size:11px; color:#f8fafc; cursor:help;">
+            <span style="color:${rarityColor}; font-weight:bold;">✦</span>
+            <span>${def.name}</span>
+          </div>
+        `;
+      }
+      this.elRelicsList.innerHTML = relicsHtml;
+    }
+
+    // 2. Modifiers
+    if (damageBonus > 0) {
+      const pct = Math.round(damageBonus * 100);
+      this.elModifierDamage.style.display = 'inline';
+      this.elModifierDamage.textContent = `⚔️ Forja: +${pct}% Dano`;
+    } else {
+      this.elModifierDamage.style.display = 'none';
+    }
+
+    if (nextBattleBonusGold > 0) {
+      this.elModifierBonusGold.style.display = 'inline';
+      this.elModifierBonusGold.textContent = `💰 Suprimentos: +${nextBattleBonusGold}g`;
+    } else {
+      this.elModifierBonusGold.style.display = 'none';
+    }
+  }
+
+  private getRarityColor(rarity: RelicRarity): string {
+    switch (rarity) {
+      case 'COMMON':
+        return '#94a3b8';
+      case 'UNCOMMON':
+        return '#22c55e';
+      case 'RARE':
+        return '#3b82f6';
+      case 'EPIC':
+        return '#a855f7';
+    }
   }
 
   // =========================================================================
@@ -456,9 +574,47 @@ export class TacticalHud {
     }
   }
 
+  // =========================================================================
+  // ALLIED CONSTRUCTION GRID (P0-2 State Signature Memoization)
+  // =========================================================================
+
+  public invalidateGrid(): void {
+    this.lastGridSignature = '';
+  }
+
   private updateConstructionGrid(snapshot: GameStateSnapshot): void {
     const playerSlots = snapshot.slots.filter((s) => s.team === 'PLAYER');
     const playerGold = snapshot.economy.PLAYER.gold;
+
+    // 1. Calculate Memoization Signature (Section 1.3 P0-2)
+    const goldThresholdSignature = TacticalHud.ECONOMIC_THRESHOLDS.map(
+      (th) => (playerGold >= th ? '1' : '0')
+    ).join('');
+    const slotsSignature = playerSlots
+      .map((s) => `${s.slotIndex}:${s.structureId ?? 'empty'}`)
+      .join('|');
+    const currentGridSignature = `${this.openBuildMenuSlotIndex}#${goldThresholdSignature}#${slotsSignature}`;
+
+    // 2. Fast-Path: If signature is strictly unchanged, mutate only progress bars and texts!
+    if (currentGridSignature === this.lastGridSignature) {
+      for (const slot of playerSlots) {
+        if (slot.structureId) {
+          const progressPct = slot.totalSpawnCooldownTicks > 0
+            ? Math.max(0, Math.min(100, Math.round(((slot.totalSpawnCooldownTicks - slot.currentSpawnCooldownTicks) / slot.totalSpawnCooldownTicks) * 100)))
+            : 0;
+
+          const bar = this.elSlotsGrid.querySelector(`[data-progress-bar="${slot.slotIndex}"]`) as HTMLElement | null;
+          const text = this.elSlotsGrid.querySelector(`[data-progress-text="${slot.slotIndex}"]`) as HTMLElement | null;
+
+          if (bar) bar.style.width = `${progressPct}%`;
+          if (text) text.textContent = `${progressPct}%`;
+        }
+      }
+      return;
+    }
+
+    // 3. Slow-Path: State structure changed; re-render innerHTML and update signature
+    this.lastGridSignature = currentGridSignature;
 
     let html = '';
 
@@ -540,10 +696,10 @@ export class TacticalHud {
             <div style="margin:4px 0;">
               <div style="display:flex; justify-content:space-between; font-size:9px; color:#94a3b8; margin-bottom:2px;">
                 <span>Progresso Spawn:</span>
-                <span>${progressPct}%</span>
+                <span data-progress-text="${i}">${progressPct}%</span>
               </div>
               <div style="height:5px; background:#0f172a; border-radius:3px; overflow:hidden; border:1px solid #1e293b;">
-                <div style="height:100%; width:${progressPct}%; background:${isTier2 ? '#ffd700' : '#38bdf8'}; transition:width 0.05s linear;"></div>
+                <div data-progress-bar="${i}" style="height:100%; width:${progressPct}%; background:${isTier2 ? '#ffd700' : '#38bdf8'}; transition:width 0.05s linear;"></div>
               </div>
             </div>
 
