@@ -1,0 +1,117 @@
+import { StructureDefinition, StructureTypeId } from '../types';
+
+export const STRUCTURES_CATALOG: Record<StructureTypeId, StructureDefinition> = {
+  bldg_barracks_1: {
+    id: 'bldg_barracks_1',
+    name: 'Quartel da Guarda',
+    tier: 1,
+    category: 'BARRACKS',
+    buildCostGold: 100,
+    upgradeCostGold: 0,
+    upgradesTo: 'bldg_barracks_2',
+    spawnCooldownSec: 12.0,
+    spawnsUnitId: 'unit_squire',
+  },
+  bldg_barracks_2: {
+    id: 'bldg_barracks_2',
+    name: 'Quartel Real',
+    tier: 2,
+    category: 'BARRACKS',
+    buildCostGold: 0,
+    upgradeCostGold: 130,
+    spawnCooldownSec: 12.0,
+    spawnsUnitId: 'unit_royal_knight',
+  },
+  bldg_archery_1: {
+    id: 'bldg_archery_1',
+    name: 'Campo Arquearia',
+    tier: 1,
+    category: 'ARCHERY',
+    buildCostGold: 90,
+    upgradeCostGold: 0,
+    upgradesTo: 'bldg_archery_2',
+    spawnCooldownSec: 10.0,
+    spawnsUnitId: 'unit_longbowman',
+  },
+  bldg_archery_2: {
+    id: 'bldg_archery_2',
+    name: 'Guarnição Besteiros',
+    tier: 2,
+    category: 'ARCHERY',
+    buildCostGold: 0,
+    upgradeCostGold: 120,
+    spawnCooldownSec: 11.0,
+    spawnsUnitId: 'unit_siege_crossbowman',
+  },
+  bldg_arcane_1: {
+    id: 'bldg_arcane_1',
+    name: 'Torre Arcana',
+    tier: 1,
+    category: 'ARCANE',
+    buildCostGold: 125,
+    upgradeCostGold: 0,
+    upgradesTo: 'bldg_arcane_2',
+    spawnCooldownSec: 14.0,
+    spawnsUnitId: 'unit_solar_apprentice',
+  },
+  bldg_arcane_2: {
+    id: 'bldg_arcane_2',
+    name: 'Santuário Solar',
+    tier: 2,
+    category: 'ARCANE',
+    buildCostGold: 0,
+    upgradeCostGold: 160,
+    spawnCooldownSec: 15.0,
+    spawnsUnitId: 'unit_solar_archmage',
+  },
+  bldg_stable_1: {
+    id: 'bldg_stable_1',
+    name: 'Estábulo de Guerra',
+    tier: 1,
+    category: 'STABLE',
+    buildCostGold: 140,
+    upgradeCostGold: 0,
+    upgradesTo: 'bldg_stable_2',
+    spawnCooldownSec: 16.0,
+    spawnsUnitId: 'unit_mounted_spearman',
+  },
+  bldg_stable_2: {
+    id: 'bldg_stable_2',
+    name: 'Cavalaria Sagrada',
+    tier: 2,
+    category: 'STABLE',
+    buildCostGold: 0,
+    upgradeCostGold: 175,
+    spawnCooldownSec: 17.0,
+    spawnsUnitId: 'unit_dawn_paladin',
+  },
+  bldg_siege_1: {
+    id: 'bldg_siege_1',
+    name: 'Forja de Cerco',
+    tier: 1,
+    category: 'SIEGE',
+    buildCostGold: 160,
+    upgradeCostGold: 0,
+    upgradesTo: 'bldg_siege_2',
+    spawnCooldownSec: 22.0,
+    spawnsUnitId: 'unit_mobile_ballista',
+  },
+  bldg_siege_2: {
+    id: 'bldg_siege_2',
+    name: 'Oficina de Catapulta',
+    tier: 2,
+    category: 'SIEGE',
+    buildCostGold: 0,
+    upgradeCostGold: 210,
+    spawnCooldownSec: 25.0,
+    spawnsUnitId: 'unit_greek_fire_catapult',
+  },
+};
+
+export function getStructureDefinition(structureId: StructureTypeId): StructureDefinition {
+  const def = STRUCTURES_CATALOG[structureId];
+  if (!def) {
+    throw new Error(`Structure definition not found for type: ${structureId}`);
+  }
+  return def;
+}

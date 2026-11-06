@@ -30,6 +30,27 @@
 | Marco | Status | Escopo Principal |
 | :--- | :---: | :--- |
 | **Marco 0: Governança & Fundação Documental** | Concluído | `docs/GDD.md` v1.0 e `docs/GOVERNANCE.md` oficializados no repositório. |
-| **Sprint 1: Core Headless & Arena Linear Básica** | A Iniciar | Setup TS/Vite/Vitest, PRNG Mulberry32, Fixed Timestep 20 TPS, Grid 4x3, Economia/Mina Real, Quartel e Arquearia N1, Cidadelas e testes unitários de combate. |
-| **Sprint 2: Arsenal Completo, IA & Phaser 3** | Planejado | 5 Estruturas N1/N2 e habilidades únicas, Matriz 4x4 completa, IA oponente, Renderizador Phaser 3 interpolado e HUD de batalha. |
-| **Sprint 3: Metagame Roguelike, Relíquias & Polimento** | Planejado | Mapa procedural de nós (7 camadas), 8 Relíquias Reais, Chefe do Ato 1 (*O Tirano de Ferro*), persistência local, áudio procedural e stress test de 200 unidades. |
+| **Sprint 1: Core Headless & Arena Linear Básica** | Concluído (57/57 testes) | Setup TS/Vite/Vitest, PRNG Mulberry32, Fixed Timestep 20 TPS, Grid 4x3, Economia/Mina Real, Quartel e Arquearia N1/N2, Cidadelas, Cabo de Guerra e suíte de testes determinísticos. |
+| **Sprint 2: Arsenal Completo, IA & Phaser 3** | Próximo Marco | 5 Estruturas N1/N2 e habilidades únicas completas, IA oponente (4 perfis + matriz de reação), Renderizador Phaser 3 interpolado (60 FPS) e HUD tático. |
+| **Sprint 3: Metagame Roguelike, Relíquias & Polimento** | Planejado | Mapa procedural de nós (7 camadas), 8 Relíquias Reais, Chefe do Ato 1 (*O Tirano de Ferro*), persistência local, áudio procedural e polimento final. |
+
+---
+
+## Como Executar e Validar
+
+```bash
+# Instalar dependências
+npm install
+
+# Executar suíte de testes determinísticos e de performance (Vitest)
+npm test
+
+# Validar tipagem estrita (TypeScript)
+npm run typecheck
+
+# Iniciar servidor de desenvolvimento interativo no navegador
+npm run dev
+
+# Gerar bundle de produção
+npm run build
+```
