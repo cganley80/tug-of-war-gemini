@@ -1,4 +1,4 @@
-# Game Design Document (GDD) v1.0
+# Game Design Document (GDD) v1.1 (Harmonizado Pós-Sprint 1)
 # Tug of War: Citadels of Aethelgard
 
 > **Documento Oficial de Engenharia de Sistemas & Balanceamento**  
@@ -6,7 +6,7 @@
 > **Autor:** Game Systems & Balance Designer  
 > **Destinatários:** Gerente de Projetos (GP), Engenharia de Software, QA Estrutural, Equipe de Game Design  
 > **Data:** Novembro de 2026  
-> **Versão:** 1.0.0-PROD  
+> **Versão:** 1.1.0-PROD (Harmonizado Pós-Sprint 1)  
 
 ---
 
@@ -90,7 +90,7 @@ $$\text{Altura Útil da Faixa de Batalha } (Y): 100 \text{ a } 500 \text{ unidad
    - Onde o jogador posiciona suas Estruturas Geradoras de Tropas.
    - Unidades geradas surgem no portal da Cidadela ($X = 0$) e marcham rumo a $+X$.
 2. **Cidadela do Jogador ($X = 0$):**
-   - Ponto de origem das unidades aliadas. Possui $2500$ de HP e Armadura Fortificada ($25\%$ de mitigação contra dano comum, $200\%$ vulnerabilidade a cerco).
+   - Ponto de origem das unidades aliadas. Possui atributos canônicos de $2500\text{ HP}$, **Armadura Fortificada** (mitigação conforme a Matriz Oficial da Seção 4.1: multiplicadores de dano recebido de $50\%$ para Normal, $35\%$ para Perfurante, $50\%$ para Mágico e $200\%$ para Cerco) e **Redução Plana de Armadura $= 5$**.
 3. **Território de Defesa Aliada ($X \in [0, 800]$):**
    - Se o combate ocorrer majoritariamente nesta zona, a Cidadela ativa auxílio balístico.
 4. **Zona de Disputa Neutra / Linha de Frente Central ($X \in [800, 1200]$):**
@@ -98,7 +98,7 @@ $$\text{Altura Útil da Faixa de Batalha } (Y): 100 \text{ a } 500 \text{ unidad
 5. **Território de Avanço Ofensivo ($X \in [1200, 2000]$):**
    - Zona de pressão em solo inimigo que confere bônus moral às tropas aliadas.
 6. **Cidadela Inimiga ($X = 2000$):**
-   - Alvo primário de vitória. Possui atributos simétricos de $2500$ de HP e Armadura Fortificada.
+   - Alvo primário de vitória. Possui atributos estritamente simétricos à Cidadela Aliada: $2500\text{ HP}$, **Armadura Fortificada** (mitigação conforme a Matriz Oficial da Seção 4.1: multiplicadores de dano recebido de $50\%$ para Normal, $35\%$ para Perfurante, $50\%$ para Mágico e $200\%$ para Cerco) e **Redução Plana de Armadura $= 5$**.
 7. **Zona de Construção Inimiga ($X \in [2050, 2350]$):**
    - Grid espelhado de $4 \times 3$ slots onde a IA posiciona suas estruturas. Suas unidades marcham rumo a $-X$.
 
@@ -220,7 +220,7 @@ BASE   [Torre Arcana] ----------> Aprendiz Solar (N1) ------> Arquimago Solar (N
 - **Balista Móvel (N1):**
   - *Disparo Linear:* O virote maciço atravessa até 2 alvos em linha reta até atingir o ponto de impacto máximo. Alcance mínimo de $150\text{ px}$ (não consegue atacar alvos que colarem em seu corpo).
 - **Catapulta de Fogo Grego (N2):**
-  - *Bombardeio Incendiário:* Arremessa vasos de fogo com dispersão AoE de $120\text{ px}$. O impacto cria uma poça de fogo no chão que persiste por $4.0\text{ s}$, causando $25$ de dano mágico por segundo a qualquer unidade inimiga que pisar sobre ela. Causa $200\%$ de dano contra o Nexus inimigo. Alcance mínimo de $180\text{ px}$.
+  - *Bombardeio Incendiário:* Arremessa vasos de fogo com dispersão AoE de $120\text{ px}$. O impacto cria uma poça de fogo no chão que persiste por $4.0\text{ s}$ ($80\text{ ticks}$), causando $25$ de dano mágico por segundo a qualquer unidade inimiga dentro do raio. Causa $200\%$ de dano contra o Nexus/Cidadela inimigo, correspondendo exatamente ao multiplicador nativo canônico de Dano de Cerco contra Armadura Fortificada ($M_{\text{tipo}} = 2.00\times$ da Matriz 4.1), sem aplicação duplicada de bônus. Alcance mínimo de $180\text{ px}$.
 
 ---
 
@@ -264,8 +264,14 @@ Onde:
 #### Exemplo Prático de Teste Unitário 1: Arqueiro Longo atacando Escudeiro
 - Atacante: Arqueiro Longo ($\text{Dano Base} = 22$, Tipo Perfurante).
 - Defensor: Escudeiro ($\text{Armadura} = \text{Pesada}$, $\text{Redução Plana} = 1$).
-- $M_{\text{tipo}} = 0.75$ (Perfurante vs Pesada).
-- Cálculo: $\lfloor (22 \times 0.75) - 1 \rfloor = \lfloor 16.5 - 1 \rfloor = \lfloor 15.5 \rfloor = 15 \text{ de dano}$.
+- Multiplicador da Matriz: $M_{\text{tipo}} = 0.75$ (Perfurante vs Pesada).
+- **Cenário A — Resolução Base Pura da Matriz (sem passivas de unidade):**
+  $$\lfloor (22 \times 0.75) - 1 \rfloor = \lfloor 16.5 - 1 \rfloor = \lfloor 15.5 \rfloor = \mathbf{15\text{ de dano}}$$
+  *(Utilizado para testes de invariância matemática pura dos multiplicadores da Matriz 4x4).*
+- **Cenário B — Resolução em Combate com Passiva Ativa (*Formação de Escudos*):**
+  O Escudeiro possui a passiva *Formação de Escudos* que reduz em $-20\%$ ($0.80\times$) o dano recebido de ataques perfurantes à distância (`range > 60 px`):
+  $$\lfloor (22 \times 0.75 \times 0.80) - 1 \rfloor = \lfloor 13.2 - 1 \rfloor = \lfloor 12.2 \rfloor = \mathbf{12\text{ de dano}}$$
+  *(Utilizado no loop de combate ativo em tempo real da simulação).*
 
 #### Exemplo Prático de Teste Unitário 2: Aprendiz Solar atacando Cavaleiro Real
 - Atacante: Aprendiz Solar ($\text{Dano Base} = 32$, Tipo Mágico).
@@ -416,7 +422,7 @@ A simulação do jogo deve ser concebida como uma aplicação **Headless (sem in
 ```
 
 #### O Ciclo de Ticks da Simulação (*Fixed Timestep*):
-- A engine lógica roda a uma frequência fixa de **$20\text{ TPS}$ (Ticks Por Segundo)** ou **$30\text{ TPS}$** (um tick a cada $50\text{ ms}$ ou $33.33\text{ ms}$).
+- A engine lógica roda obrigatoriamente a uma frequência determinística fixa de **$20\text{ TPS}$ (Ticks Por Segundo)**, correspondendo a $\Delta t = 50\text{ ms} = 0.05\text{ s}$ por tick. Essa cadência é a taxa canônica oficial para todos os cálculos matemáticos de movimento, recargas de ataque, geração de renda e simulação física.
 - A camada visual de renderização roda desacoplada a **$60\text{ FPS}$** (ou na taxa de atualização nativa do monitor do usuário), interpolando linearmente as posições dos sprites entre os dois últimos snapshots da simulação lógica:
 
 $$X_{\text{render}} = X_{\text{tick\_anterior}} + \alpha \cdot (X_{\text{tick\_atual}} - X_{\text{tick\_anterior}})$$
