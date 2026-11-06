@@ -6,9 +6,11 @@
 
 ## Documentação Oficial (Single Source of Truth)
 
-- **[Game Design Document (GDD v1.0)](./docs/GDD.md):** Especificação completa de gameplay, economia em tempo real, facção *Reino da Coroa Solar*, matriz matemática de combate 4x4, progressão Roguelike em 3 Atos, relíquias, perfis de IA e critérios de QA.
+- **[Game Design Document (GDD v1.1)](./docs/GDD.md):** Especificação completa de gameplay, economia em tempo real, facção *Reino da Coroa Solar*, matriz matemática de combate 4x4, progressão Roguelike em 3 Atos, relíquias, perfis de IA e critérios de QA.
 - **[Governança Oficial do Repositório](./docs/GOVERNANCE.md):** Arquitetura de camadas (*Headless Core Engine* vs. *Phaser 3 Renderer/UI*), topologia de subagentes e política de alocação de modelos, fluxo Git, harmonizações canônicas do GDD e portões de qualidade (*Definition of Done*).
 - **[Relatório de Entrega & Validação GD — Sprint 1](./docs/SPRINT_1_REPORT.md):** Auditoria seção por seção da Sprint 1 contra o GDD v1.0, decisões de harmonização matemática e resultados das 8 suítes de testes automatizados (57/57 verdes).
+- **[Parecer de Sign-off Sprint 1 & Especificação GD — Sprint 2](./docs/SPRINT_2_GD_SPEC.md):** Homologação da Sprint 1 pelo Game Designer, correções P0 de gameplay e especificação matemática estrita das 10 habilidades, 4 perfis de IA e HUD/Phaser 3.
+- **[Relatório de Entrega & Validação GD — Sprint 2](./docs/SPRINT_2_REPORT.md):** Relatório executivo da Sprint 2 (resolução dos 3 itens P0, 10 habilidades, 4 perfis de IA, Phaser 3 interpolado a 60 FPS + HUD tático e 111/111 testes verdes).
 
 ---
 
@@ -32,8 +34,8 @@
 | :--- | :---: | :--- |
 | **Marco 0: Governança & Fundação Documental** | Concluído | `docs/GDD.md` v1.0 e `docs/GOVERNANCE.md` oficializados no repositório. |
 | **Sprint 1: Core Headless & Arena Linear Básica** | Concluído (57/57 testes) | Setup TS/Vite/Vitest, PRNG Mulberry32, Fixed Timestep 20 TPS, Grid 4x3, Economia/Mina Real, Quartel e Arquearia N1/N2, Cidadelas, Cabo de Guerra e suíte de testes determinísticos. |
-| **Sprint 2: Arsenal Completo, IA & Phaser 3** | Próximo Marco | 5 Estruturas N1/N2 e habilidades únicas completas, IA oponente (4 perfis + matriz de reação), Renderizador Phaser 3 interpolado (60 FPS) e HUD tático. |
-| **Sprint 3: Metagame Roguelike, Relíquias & Polimento** | Planejado | Mapa procedural de nós (7 camadas), 8 Relíquias Reais, Chefe do Ato 1 (*O Tirano de Ferro*), persistência local, áudio procedural e polimento final. |
+| **Sprint 2: Arsenal Completo, IA & Phaser 3** | Concluído (111/111 testes) | Correções P0 de GD, 5 Estruturas N1/N2 e 10 habilidades únicas completas, IA oponente (4 perfis + matriz de reação + Guerreiro Colossal), Renderizador Phaser 3 interpolado (60 FPS), Web Audio e HUD tático. |
+| **Sprint 3: Metagame Roguelike, Relíquias & Polimento** | Próximo Marco | Mapa procedural de nós (7 camadas), 8 Relíquias Reais, Eventos/Acampamento/Mercador, persistência local e fluxo completo da campanha. |
 
 ---
 

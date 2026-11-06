@@ -22,7 +22,8 @@ export type UnitTypeId =
   | 'unit_mounted_spearman'
   | 'unit_dawn_paladin'
   | 'unit_mobile_ballista'
-  | 'unit_greek_fire_catapult';
+  | 'unit_greek_fire_catapult'
+  | 'unit_colossal_warrior';
 
 export type StructureTypeId =
   | 'bldg_barracks_1'
@@ -34,7 +35,10 @@ export type StructureTypeId =
   | 'bldg_stable_1'
   | 'bldg_stable_2'
   | 'bldg_siege_1'
-  | 'bldg_siege_2';
+  | 'bldg_siege_2'
+  | 'bldg_renegade_altar';
+
+export type AIProfileId = 'AGGRESSIVE' | 'DEFENSIVE' | 'SWARM' | 'BOSS_ACT1';
 
 export interface UnitDefinition {
   readonly id: UnitTypeId;
@@ -91,6 +95,18 @@ export interface UnitState {
   attackCount: number;
   hasCharged: boolean;
   stunTicksRemaining: number;
+  solarFlameTicksRemaining: number;
+}
+
+export interface GreekFireHazard {
+  readonly id: string;
+  readonly team: TeamId;
+  readonly x: number;
+  readonly y: number;
+  readonly radiusPx: number;
+  ticksRemaining: number;
+  readonly tickInterval: number;
+  readonly baseMagicDamage: number;
 }
 
 export interface StructureSlotState {
@@ -142,5 +158,6 @@ export interface GameStateSnapshot {
   readonly economy: Record<TeamId, TeamEconomyState>;
   readonly slots: StructureSlotState[];
   readonly units: UnitState[];
+  readonly hazards: GreekFireHazard[];
   readonly stateHash: string;
 }

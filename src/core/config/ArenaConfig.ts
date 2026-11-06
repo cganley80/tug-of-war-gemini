@@ -52,6 +52,29 @@ export const DESPERATION_BALISTA_DAMAGE_TYPE: DamageType = 'PIERCING';
 export const SOFT_COLLISION_RADIUS = 16;
 export const SOFT_COLLISION_FORCE = 0.5;
 
-// Unit Passive thresholds
+// Tactical Aggro & Y-Steering (Sprint 2 - P0-1)
+export const AGGRO_RANGE_PX = 260;
+export const AGGRO_BEHIND_MAX_PX = 40;
+
+// Unit Passive thresholds & Special Abilities (Sprint 2)
 export const LONGBOWMAN_STATIONARY_TICKS = 60; // 3.0 seconds @ 20 TPS for Rapid Volley
 export const LONGBOWMAN_ATTACK_SPEED_MULTIPLIER = 1.15; // +15% attack speed (effective cooldown / 1.15)
+
+export const SOLAR_FLAME_DURATION_TICKS = 60; // 3.0 seconds @ 20 TPS
+export const SOLAR_FLAME_COOLDOWN_MULTIPLIER = 1 / 0.75; // -25% attack speed (cooldown * 1.3333)
+
+export const DAWN_PALADIN_AURA_RADIUS_PX = 120;
+export const DAWN_PALADIN_AURA_FLAT_REDUCTION = 1;
+export const DAWN_PALADIN_STUN_TICKS = 20; // 1.0s @ 20 TPS
+
+export const BALLISTA_PIERCE_FORWARD_MAX_PX = 120;
+export const BALLISTA_PIERCE_VERTICAL_MAX_PX = 30;
+
+export const ARCHMAGE_SUPERNOVA_BASE_DAMAGE = 110;
+export const ARCHMAGE_SUPERNOVA_RADIUS_PX = 100;
+
+export const GREEK_FIRE_DURATION_TICKS = 80; // 4.0 seconds @ 20 TPS
+export const GREEK_FIRE_RADIUS_PX = 120;
+export const GREEK_FIRE_INTERVAL_TICKS = 20; // 1.0 second @ 20 TPS
+export const GREEK_FIRE_BASE_MAGIC_DAMAGE = 25;
+

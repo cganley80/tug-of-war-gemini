@@ -30,6 +30,7 @@ function createDummyUnit(partial: Partial<UnitState> & { id: string; team: 'PLAY
     attackCount: 0,
     hasCharged: false,
     stunTicksRemaining: 0,
+    solarFlameTicksRemaining: 0,
     ...partial,
   };
 }

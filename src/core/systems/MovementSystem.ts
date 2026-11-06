@@ -10,6 +10,8 @@ import {
   SOFT_COLLISION_RADIUS,
   SOFT_COLLISION_FORCE,
   LONGBOWMAN_STATIONARY_TICKS,
+  AGGRO_RANGE_PX,
+  AGGRO_BEHIND_MAX_PX,
 } from '../config/ArenaConfig';
 
 export class MovementSystem {
@@ -59,18 +61,55 @@ export class MovementSystem {
       const moveStep = speed * TICK_DURATION_SEC;
       const prevX = unit.x;
 
-      if (unit.team === 'PLAYER') {
-        unit.x += moveStep;
-        if (unit.x >= ARENA_MAX_X) {
-          unit.x = ARENA_MAX_X;
-          unit.isTargetingCitadel = true;
+      // P0-1: Tactical Aggro & Y-Steering (Convergência Vertical de Interceptação)
+      // Escaneia inimigos vivos dentro de AGGRO_RANGE_PX (260px) à frente ou até 40px atrás
+      let closestEnemy: UnitState | null = null;
+      let minDistance = Infinity;
+
+      for (const enemy of aliveUnits) {
+        if (enemy.team === unit.team || enemy.currentHp <= 0) continue;
+
+        const deltaXFront = unit.team === 'PLAYER' ? enemy.x - unit.x : unit.x - enemy.x;
+        if (deltaXFront < -AGGRO_BEHIND_MAX_PX) continue;
+
+        const dx = enemy.x - unit.x;
+        const dy = enemy.y - unit.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist <= AGGRO_RANGE_PX) {
+          if (dist < minDistance - 0.0001) {
+            minDistance = dist;
+            closestEnemy = enemy;
+          } else if (Math.abs(dist - minDistance) <= 0.0001 && closestEnemy) {
+            if (enemy.id.localeCompare(closestEnemy.id) < 0) {
+              closestEnemy = enemy;
+            }
+          }
         }
+      }
+
+      if (closestEnemy && minDistance > 0.0001) {
+        const dx = closestEnemy.x - unit.x;
+        const dy = closestEnemy.y - unit.y;
+        const nx = dx / minDistance;
+        const ny = dy / minDistance;
+        unit.x += nx * moveStep;
+        unit.y += ny * moveStep;
       } else {
-        unit.x -= moveStep;
-        if (unit.x <= ARENA_MIN_X) {
-          unit.x = ARENA_MIN_X;
-          unit.isTargetingCitadel = true;
+        if (unit.team === 'PLAYER') {
+          unit.x += moveStep;
+        } else {
+          unit.x -= moveStep;
         }
+      }
+
+      // Check Citadel boundaries
+      if (unit.team === 'PLAYER' && unit.x >= ARENA_MAX_X) {
+        unit.x = ARENA_MAX_X;
+        unit.isTargetingCitadel = true;
+      } else if (unit.team === 'ENEMY' && unit.x <= ARENA_MIN_X) {
+        unit.x = ARENA_MIN_X;
+        unit.isTargetingCitadel = true;
       }
 
       // Track stationary ticks for Longbowman passive (Saraivada Rápida)

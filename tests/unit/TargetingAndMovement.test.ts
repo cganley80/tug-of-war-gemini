@@ -32,6 +32,7 @@ describe('Targeting & Movement Systems (GDD Section 4.3 & 7.3)', () => {
       attackCount: 0,
       hasCharged: false,
       stunTicksRemaining: 0,
+      solarFlameTicksRemaining: 0,
     };
 
     // Enemy unit at distance 100px (< 150px min range)
@@ -52,6 +53,7 @@ describe('Targeting & Movement Systems (GDD Section 4.3 & 7.3)', () => {
       attackCount: 0,
       hasCharged: false,
       stunTicksRemaining: 0,
+      solarFlameTicksRemaining: 0,
     };
 
     // Enemy unit at distance 300px (eligible: >= 150px and <= 580px range)
@@ -72,6 +74,7 @@ describe('Targeting & Movement Systems (GDD Section 4.3 & 7.3)', () => {
       attackCount: 0,
       hasCharged: false,
       stunTicksRemaining: 0,
+      solarFlameTicksRemaining: 0,
     };
 
     const decision = TargetingSystem.selectTarget(
@@ -101,6 +104,7 @@ describe('Targeting & Movement Systems (GDD Section 4.3 & 7.3)', () => {
       attackCount: 0,
       hasCharged: false,
       stunTicksRemaining: 0,
+      solarFlameTicksRemaining: 0,
     };
 
     // Enemy unit at distance 160px (< 180px min range for catapult)
@@ -121,6 +125,7 @@ describe('Targeting & Movement Systems (GDD Section 4.3 & 7.3)', () => {
       attackCount: 0,
       hasCharged: false,
       stunTicksRemaining: 0,
+      solarFlameTicksRemaining: 0,
     };
 
     // Enemy unit at distance 250px (eligible: >= 180px and <= 680px range)
@@ -141,6 +146,7 @@ describe('Targeting & Movement Systems (GDD Section 4.3 & 7.3)', () => {
       attackCount: 0,
       hasCharged: false,
       stunTicksRemaining: 0,
+      solarFlameTicksRemaining: 0,
     };
 
     const decision = TargetingSystem.selectTarget(
@@ -170,6 +176,7 @@ describe('Targeting & Movement Systems (GDD Section 4.3 & 7.3)', () => {
       attackCount: 0,
       hasCharged: false,
       stunTicksRemaining: 0,
+      solarFlameTicksRemaining: 0,
     };
 
     // Update movement - with speed 65px/s and dt=0.05s, step = 3.25px
@@ -199,6 +206,7 @@ describe('Targeting & Movement Systems (GDD Section 4.3 & 7.3)', () => {
       attackCount: 0,
       hasCharged: false,
       stunTicksRemaining: 0,
+      solarFlameTicksRemaining: 0,
     };
 
     expect(MovementSystem.hasRapidVolleyActive(archer)).toBe(false);

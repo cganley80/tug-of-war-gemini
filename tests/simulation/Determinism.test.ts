@@ -125,4 +125,66 @@ describe('Bit-by-Bit Determinism & SHA-256 State Hash (GDD Section 7.3.2)', () =
     expect(engine1.citadels.PLAYER.currentHp).toBe(engine2.citadels.PLAYER.currentHp);
     expect(engine1.citadels.ENEMY.currentHp).toBe(engine2.citadels.ENEMY.currentHp);
   });
+
+  it('3-minute full battle (3600 ticks, seed = 123456) with BOSS_ACT1 AI and Sprint 2 units produces 100% identical SHA-256 hash', { timeout: 30000 }, () => {
+    const seed = 123456;
+    const ticksToSimulate = 3600;
+
+    function runBossBattle(): GameEngine {
+      const engine = new GameEngine({
+        seed,
+        aiProfile: 'BOSS_ACT1',
+        initialPlayerGold: 1000,
+        initialEnemyGold: 200,
+      });
+
+      // Give high Citadel HP so battle runs the complete 3600 ticks for determinism comparison
+      engine.citadels.PLAYER.currentHp = 50000;
+      engine.citadels.ENEMY.currentHp = 50000;
+
+      // Player builds structures covering all Sprint 2 lines
+      engine.buildStructure('PLAYER', 0, 'bldg_barracks_1');
+      engine.buildStructure('PLAYER', 1, 'bldg_archery_1');
+      engine.buildStructure('PLAYER', 2, 'bldg_stable_1');
+      engine.buildStructure('PLAYER', 3, 'bldg_arcane_1');
+      engine.buildStructure('PLAYER', 4, 'bldg_siege_1');
+
+      for (let t = 0; t < ticksToSimulate; t++) {
+        // Player upgrades structures across the battle
+        if (t === 300) engine.upgradeStructure('PLAYER', 0); // Royal Knight
+        if (t === 600) engine.upgradeStructure('PLAYER', 1); // Siege Crossbowman
+        if (t === 900) engine.upgradeStructure('PLAYER', 2); // Dawn Paladin
+        if (t === 1200) engine.upgradeStructure('PLAYER', 3); // Solar Archmage
+        if (t === 1500) engine.upgradeStructure('PLAYER', 4); // Greek Fire Catapult
+
+        if (t === 500 || t === 1000) {
+          engine.upgradeMine('PLAYER');
+        }
+
+        engine.tick();
+      }
+
+      return engine;
+    }
+
+    const run1 = runBossBattle();
+    const hash1 = run1.computeStateHash();
+    const snap1 = run1.getSnapshot();
+
+    const run2 = runBossBattle();
+    const hash2 = run2.computeStateHash();
+    const snap2 = run2.getSnapshot();
+
+    expect(hash1).toBe(hash2);
+    expect(snap1.tick).toBe(3600);
+    expect(snap1.citadels.PLAYER.currentHp).toBe(snap2.citadels.PLAYER.currentHp);
+    expect(snap1.citadels.ENEMY.currentHp).toBe(snap2.citadels.ENEMY.currentHp);
+    expect(snap1.economy.PLAYER.gold).toBe(snap2.economy.PLAYER.gold);
+    expect(snap1.economy.ENEMY.gold).toBe(snap2.economy.ENEMY.gold);
+    expect(snap1.units.length).toBe(snap2.units.length);
+    expect(snap1.units).toEqual(snap2.units);
+    expect(snap1.hazards.length).toBe(snap2.hazards.length);
+    expect(snap1.hazards).toEqual(snap2.hazards);
+  });
 });
+

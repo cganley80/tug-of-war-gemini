@@ -106,6 +106,16 @@ export const STRUCTURES_CATALOG: Record<StructureTypeId, StructureDefinition> = 
     spawnCooldownSec: 25.0,
     spawnsUnitId: 'unit_greek_fire_catapult',
   },
+  bldg_renegade_altar: {
+    id: 'bldg_renegade_altar',
+    name: 'Altar dos Renegados',
+    tier: 2,
+    category: 'BARRACKS',
+    buildCostGold: 0,
+    upgradeCostGold: 0,
+    spawnCooldownSec: 45.0,
+    spawnsUnitId: 'unit_colossal_warrior',
+  },
 };
 
 export function getStructureDefinition(structureId: StructureTypeId): StructureDefinition {

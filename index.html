@@ -4,26 +4,46 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tug of War: Citadels of Aethelgard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&display=swap" rel="stylesheet">
     <style>
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
-        padding: 0;
-        background-color: #121214;
-        color: #e1e1e6;
-        font-family: 'Cinzel', 'Georgia', serif, sans-serif;
+        padding: 16px 8px;
+        background-color: #05070a;
+        color: #e2e8f0;
+        font-family: 'Cinzel', Georgia, serif, sans-serif;
         display: flex;
         justify-content: center;
-        align-items: center;
-        height: 100vh;
-        overflow: hidden;
+        align-items: flex-start;
+        min-height: 100vh;
+        overflow-y: auto;
+        overflow-x: hidden;
       }
       #app {
         display: flex;
-        justify-content: center;
-        align-items: center;
-        box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
-        border: 2px solid #29292e;
-        background-color: #09090a;
+        flex-direction: column;
+        gap: 12px;
+        width: 1180px;
+        max-width: 98vw;
+        padding: 14px;
+        background-color: #0b0f19;
+        border: 2px solid #1e293b;
+        border-radius: 10px;
+        box-shadow: 0 0 35px rgba(0, 0, 0, 0.9);
+      }
+      button:hover {
+        filter: brightness(1.15);
+      }
+      button:active {
+        transform: scale(0.98);
+      }
+      select:focus, button:focus {
+        outline: 1px solid #f59e0b;
       }
     </style>
   </head>

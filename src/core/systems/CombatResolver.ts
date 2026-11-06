@@ -15,6 +15,7 @@ export interface DamageCalculationParams {
   readonly defenderCurrentHp?: number;
   readonly isChargeAttack?: boolean;
   readonly isSmashAttack?: boolean; // Royal Knight 3rd attack
+  readonly hasPaladinAura?: boolean; // Dawn Paladin Devotion Aura (+1 flat reduction)
   readonly applyPassives?: boolean;
 }
 
@@ -52,13 +53,14 @@ export class CombatResolver {
       defenderCurrentHp,
       isChargeAttack = false,
       isSmashAttack = false,
+      hasPaladinAura = false,
       applyPassives = false,
     } = params;
 
     const typeMultiplier = getDamageMultiplier(damageType, defenderArmorType);
 
     let passiveDamageMultiplier = 1.0;
-    let effectiveFlatReduction = defenderFlatReduction;
+    let effectiveFlatReduction = defenderFlatReduction + (hasPaladinAura ? 1 : 0);
     let isCritical = false;
 
     if (applyPassives) {

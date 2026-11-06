@@ -165,6 +165,22 @@ export const UNITS_CATALOG: Record<UnitTypeId, UnitDefinition> = {
     aoeRadiusPx: 120,
     isMelee: false,
   },
+  unit_colossal_warrior: {
+    id: 'unit_colossal_warrior',
+    name: 'Guerreiro Colossal',
+    tier: 2,
+    structureId: 'bldg_renegade_altar',
+    maxHp: 1800,
+    armorType: 'HEAVY',
+    flatReduction: 4,
+    baseDamage: 75,
+    attackIntervalSec: 1.4,
+    attackRangePx: 55,
+    moveSpeedPxPerSec: 50,
+    damageType: 'NORMAL',
+    bountyGold: 15,
+    isMelee: true,
+  },
 };
 
 export function getUnitDefinition(typeId: UnitTypeId): UnitDefinition {
