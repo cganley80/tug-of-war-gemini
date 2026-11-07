@@ -3,8 +3,8 @@
 **De:** Gerente de Game Design (GD)  
 **Para:** Gerente de Projetos (GP) & Equipe de Engenharia  
 **Data:** 06 de Novembro de 2026  
-**Referência Base:** Entrega da Sprint 3 (`1e50248`), [`docs/SPRINT_3_REPORT.md`](./SPRINT_3_REPORT.md) e [`docs/SPRINT_3_GD_SPEC.md`](./SPRINT_3_GD_SPEC.md)  
-**Status da Entrega da Sprint 3:** **APROVADA COM RESSALVAS (Requer Hotfix P0 de Progressão e UX da Campanha antes do Playtest do MVP)**
+**Referência Base:** Entrega da Sprint 3 (`1e50248`), Hotfix P0 (`dd38d8a`), [`docs/SPRINT_3_REPORT.md`](./SPRINT_3_REPORT.md) e [`docs/SPRINT_3_GD_SPEC.md`](./SPRINT_3_GD_SPEC.md)  
+**Status da Entrega da Sprint 3 & Marco MVP:** **100% APROVADA — SIGN-OFF FINAL DE GAME DESIGN CONCEDIDO**
 
 ---
 
@@ -78,14 +78,14 @@ Embora os testes unitários passem, nossa inspeção profunda do **loop real de 
 
 ---
 
-## 3. Critérios de Aceite do Hotfix P0 (Checklist de Fechamento do MVP)
+## 3. Critérios de Aceite do Hotfix P0 (Checklist de Fechamento do MVP — Validado em `dd38d8a`)
 
-- [ ] **CA-Hotfix-1 (`CampaignManager.ts`):** Um jogador recém-iniciado em `node_0_0` (`isNodeResolved('node_0_0') === false`) recebe `[]` em `getAvailableNextNodes()` e `false` ao tentar `travelToNode('node_1_0')` antes de vencer a batalha de `node_0_0`.
-- [ ] **CA-Hotfix-2 (`CampaignManager.ts`):** Após vencer `node_0_0`, `isNodeResolved('node_0_0')` passa a ser `true`, `getAvailableNextNodes()` libera `node_1_0` e `node_1_1`, e chamadas subsequentes a `completeBattle()` no mesmo `node_0_0` não concedem ouro nem relíquias duplicadas.
-- [ ] **CA-Hotfix-3 (`CampaignManager.ts`):** Em nós `CAMPFIRE` e `EVENT`, a primeira execução de `applyCampfireAction` ou `resolveEventChoice` resolve o nó (`isNodeResolved === true`) e libera o avanço; uma segunda tentativa no mesmo nó retorna `false` sem acumular bônus duplicados.
-- [ ] **CA-Hotfix-4 (`CampaignManager.ts`):** Ao viajar para um nó `MERCHANT` via `travelToNode`, o nó já permite avançar para a camada seguinte (`isNodeResolved === true`), mas continua permitindo compras (`buyMerchantRelic`, `buyMerchantRepair`) enquanto o jogador permanecer estacionado nele.
-- [ ] **CA-Hotfix-5 (`CampaignOverlay.ts` & `TacticalHud.ts` & `main.ts`):** Ao vencer ou perder uma batalha de Campanha, o `#hud-gameover-modal` de Skirmish não é exibido, e após `1200ms` o `CampaignOverlay` (`z-index: 10000`) abre diretamente na tela `RELIC_REWARD`, `RUN_VICTORY` ou `RUN_OVER`.
-- [ ] **CA-Hotfix-6 (Testes Automatizados):** Novos testes cobrindo os bloqueios `P0-A`, `P0-B` e `P0-C` adicionados à suíte Vitest com 100% de aprovação (`npm test`, `npm run typecheck`, `npm run build`).
+- [x] **CA-Hotfix-1 (`CampaignManager.ts`):** Um jogador recém-iniciado em `node_0_0` (`isNodeResolved('node_0_0') === false`) recebe `[]` em `getAvailableNextNodes()` e `false` ao tentar `travelToNode('node_1_0')` antes de vencer a batalha de `node_0_0`.
+- [x] **CA-Hotfix-2 (`CampaignManager.ts`):** Após vencer `node_0_0`, `isNodeResolved('node_0_0')` passa a ser `true`, `getAvailableNextNodes()` libera `node_1_0` e `node_1_1`, e chamadas subsequentes a `completeBattle()` no mesmo `node_0_0` não concedem ouro nem relíquias duplicadas.
+- [x] **CA-Hotfix-3 (`CampaignManager.ts`):** Em nós `CAMPFIRE` e `EVENT`, a primeira execução de `applyCampfireAction` ou `resolveEventChoice` resolve o nó (`isNodeResolved === true`) e libera o avanço; uma segunda tentativa no mesmo nó retorna `false` sem acumular bônus duplicados.
+- [x] **CA-Hotfix-4 (`CampaignManager.ts`):** Ao viajar para um nó `MERCHANT` via `travelToNode`, o nó já permite avançar para a camada seguinte (`isNodeResolved === true`), mas continua permitindo compras (`buyMerchantRelic`, `buyMerchantRepair`) enquanto o jogador permanecer estacionado nele.
+- [x] **CA-Hotfix-5 (`CampaignOverlay.ts` & `TacticalHud.ts` & `main.ts`):** Ao vencer ou perder uma batalha de Campanha, o `#hud-gameover-modal` de Skirmish não é exibido, e após `1200ms` o `CampaignOverlay` (`z-index: 10000`) abre diretamente na tela `RELIC_REWARD`, `RUN_VICTORY` ou `RUN_OVER`.
+- [x] **CA-Hotfix-6 (Testes Automatizados):** Novos testes cobrindo os bloqueios `P0-A`, `P0-B` e `P0-C` adicionados à suíte Vitest com 100% de aprovação (`156/156` testes verdes em `npm test`, `npm run typecheck`, `npm run build`).
 
 ---
 *Assinado:*  
