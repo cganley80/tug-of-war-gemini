@@ -73,7 +73,7 @@ export class CampaignOverlay {
       right: 0;
       bottom: 0;
       background: rgba(5, 7, 10, 0.94);
-      z-index: 9998;
+      z-index: 10000;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -127,6 +127,11 @@ export class CampaignOverlay {
     const currentNode = this.campaign.getCurrentNode();
     if (this.currentView === 'MAP') {
       // Keep MAP as user default when inspecting
+      return;
+    }
+
+    if (this.campaign.isNodeResolved(currentNode.id) && currentNode.type !== 'MERCHANT') {
+      this.currentView = 'MAP';
       return;
     }
 
@@ -325,6 +330,7 @@ export class CampaignOverlay {
     // Map Header Instructions
     const currentNode = this.campaign.getCurrentNode();
     const availableNodes = this.campaign.getAvailableNextNodes();
+    const isCurrentResolved = this.campaign.isNodeResolved(currentNode.id);
 
     card.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
@@ -335,10 +341,12 @@ export class CampaignOverlay {
           </div>
         </div>
 
-        <div style="display:flex; gap:10px;">
-          <!-- If current node is a special interactive node, allow reopening it -->
+        <div style="display:flex; gap:10px; align-items:center;">
+          <!-- P0-A / P0-B: Only allow opening current node if not resolved (or if Merchant, which allows optional shopping before leaving) -->
           ${
-            currentNode.type === 'CAMPFIRE'
+            isCurrentResolved && currentNode.type !== 'MERCHANT'
+              ? `<span style="background:#064e3b; color:#a7f3d0; border:1px solid #059669; padding:6px 14px; border-radius:4px; font-size:12px; font-weight:bold;">✓ Nó Concluído — Selecione o próximo destino</span>`
+              : currentNode.type === 'CAMPFIRE'
               ? `<button id="map-btn-open-current" style="background:#b45309; color:#fff; border:none; padding:6px 14px; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer;">🔥 Acessar Fogueira</button>`
               : currentNode.type === 'MERCHANT'
               ? `<button id="map-btn-open-current" style="background:#0284c7; color:#fff; border:none; padding:6px 14px; border-radius:4px; font-size:12px; font-weight:bold; cursor:pointer;">⚖️ Abrir Mercador</button>`
@@ -373,6 +381,9 @@ export class CampaignOverlay {
 
     // Hook buttons
     card.querySelector('#map-btn-open-current')?.addEventListener('click', () => {
+      if (this.campaign.isNodeResolved(currentNode.id) && currentNode.type !== 'MERCHANT') {
+        return;
+      }
       if (currentNode.type === 'CAMPFIRE') {
         this.currentView = 'CAMPFIRE';
         this.render();
@@ -466,7 +477,9 @@ export class CampaignOverlay {
 
       const isCurrent = nodeId === currentNode.id;
       const isVisited = visitedSet.has(nodeId);
+      const isResolved = this.campaign.isNodeResolved(nodeId);
       const isAvailable = availableIds.has(nodeId);
+      const canInteractCurrent = isCurrent && (!isResolved || node.type === 'MERCHANT');
 
       const nodeButton = document.createElement('div');
       nodeButton.style.cssText = `
@@ -486,7 +499,7 @@ export class CampaignOverlay {
         align-items: center;
         justify-content: center;
         text-align: center;
-        cursor: ${isAvailable || isCurrent ? 'pointer' : 'default'};
+        cursor: ${isAvailable || canInteractCurrent ? 'pointer' : 'default'};
         box-shadow: ${isCurrent ? '0 0 16px rgba(255, 215, 0, 0.6)' : isAvailable ? '0 0 12px rgba(56, 189, 248, 0.4)' : 'none'};
         opacity: ${isVisited && !isCurrent ? '0.7' : isAvailable || isCurrent ? '1.0' : '0.45'};
         transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -501,12 +514,12 @@ export class CampaignOverlay {
           ${node.name}
         </div>
         <div style="font-size:9px; color:#94a3b8; margin-top:1px;">
-          ${isCurrent ? '⭐ Atual' : isVisited ? '✓ Visitado' : isAvailable ? '➔ Avançar' : typeLabel}
+          ${isCurrent ? (isResolved && node.type !== 'MERCHANT' ? '✓ Concluído' : '⭐ Atual') : isResolved ? '✓ Concluído' : isVisited ? '✓ Visitado' : isAvailable ? '➔ Avançar' : typeLabel}
         </div>
       `;
 
       // Hover effect for interactive nodes
-      if (isAvailable || isCurrent) {
+      if (isAvailable || canInteractCurrent) {
         nodeButton.onmouseenter = () => {
           nodeButton.style.transform = 'translate(-50%, -50%) scale(1.08)';
         };
@@ -515,8 +528,8 @@ export class CampaignOverlay {
         };
 
         nodeButton.onclick = () => {
-          if (isCurrent) {
-            // Re-open current special screen or start battle
+          if (canInteractCurrent) {
+            // Re-open current special screen or start battle (only when unresolved or Merchant)
             if (node.type === 'CAMPFIRE') {
               this.currentView = 'CAMPFIRE';
               this.render();

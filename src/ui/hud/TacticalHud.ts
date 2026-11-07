@@ -404,13 +404,14 @@ export class TacticalHud {
     soundSynth: SoundSynthesizer,
     isPaused: boolean,
     currentSpeed: number,
-    cameraMode: 'OVERVIEW' | 'FOLLOW_FRONTLINE'
+    cameraMode: 'OVERVIEW' | 'FOLLOW_FRONTLINE',
+    suppressGameOverModal: boolean = false
   ): void {
     this.updateHeaderControls(soundSynth, isPaused, currentSpeed, cameraMode);
     this.updateTugOfWarGauge(snapshot);
     this.updateEconomyPanel(snapshot);
     this.updateConstructionGrid(snapshot);
-    this.updateGameOver(snapshot);
+    this.updateGameOver(snapshot, suppressGameOverModal);
   }
 
   // =========================================================================
@@ -582,6 +583,10 @@ export class TacticalHud {
     this.lastGridSignature = '';
   }
 
+  public hideGameOverModal(): void {
+    this.elGameOverModal.style.display = 'none';
+  }
+
   private updateConstructionGrid(snapshot: GameStateSnapshot): void {
     const playerSlots = snapshot.slots.filter((s) => s.team === 'PLAYER');
     const playerGold = snapshot.economy.PLAYER.gold;
@@ -737,7 +742,14 @@ export class TacticalHud {
     `;
   }
 
-  private updateGameOver(snapshot: GameStateSnapshot): void {
+  private updateGameOver(snapshot: GameStateSnapshot, suppressGameOverModal: boolean = false): void {
+    if (suppressGameOverModal || !snapshot.isGameOver) {
+      if (this.elGameOverModal.style.display !== 'none') {
+        this.elGameOverModal.style.display = 'none';
+      }
+      return;
+    }
+
     if (snapshot.isGameOver && this.elGameOverModal.style.display !== 'flex') {
       this.elGameOverModal.style.display = 'flex';
       const isPlayerWinner = snapshot.winnerTeam === 'PLAYER';

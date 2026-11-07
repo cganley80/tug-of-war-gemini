@@ -47,6 +47,7 @@ export class CampaignManager {
       currentLayer: 0,
       currentNodeId: 'node_0_0',
       visitedNodeIds: ['node_0_0'],
+      resolvedNodeIds: [],
       playerCitadelHp: CITADEL_MAX_HP,
       campaignGold: 50,
       activeRelicIds: [],
@@ -200,9 +201,24 @@ export class CampaignManager {
     return this.nodes[nodeId];
   }
 
+  /**
+   * Returns true if the specified node (or currentNodeId by default) has already been resolved.
+   */
+  public isNodeResolved(nodeId: string = this.state.currentNodeId): boolean {
+    return this.state.resolvedNodeIds.includes(nodeId);
+  }
+
+  private markNodeResolved(nodeId: string = this.state.currentNodeId): void {
+    if (!this.state.resolvedNodeIds.includes(nodeId)) {
+      this.state.resolvedNodeIds.push(nodeId);
+    }
+  }
+
   public getAvailableNextNodes(): CampaignNode[] {
     if (this.state.isRunOver) return [];
     const current = this.getCurrentNode();
+    // P0-A: Player can only advance to outgoing nodes after resolving the current node
+    if (!this.isNodeResolved(current.id)) return [];
     return current.outgoingNodeIds.map((id) => this.nodes[id]).filter(Boolean);
   }
 
@@ -213,6 +229,11 @@ export class CampaignManager {
     if (this.state.isRunOver) return false;
 
     const current = this.getCurrentNode();
+    // P0-A: Must resolve current node before advancing to the next layer
+    if (!this.isNodeResolved(current.id)) {
+      return false;
+    }
+
     if (!current.outgoingNodeIds.includes(targetNodeId)) {
       return false;
     }
@@ -227,6 +248,9 @@ export class CampaignManager {
     // Initialize node specific content
     if (targetNode.type === 'MERCHANT') {
       this.merchantRelics = this.generateRelicPool(3);
+      // P0-A Merchant exception: immediately mark Merchant node as resolved on arrival
+      // so the player can either purchase items or leave for the next layer optionally.
+      this.markNodeResolved(targetNode.id);
     }
 
     return true;
@@ -257,7 +281,7 @@ export class CampaignManager {
    */
   public applyCampfireAction(action: CampfireActionId): boolean {
     const node = this.getCurrentNode();
-    if (node.type !== 'CAMPFIRE' || this.state.isRunOver) {
+    if (node.type !== 'CAMPFIRE' || this.state.isRunOver || this.isNodeResolved(node.id)) {
       return false;
     }
 
@@ -268,15 +292,18 @@ export class CampaignManager {
           CITADEL_MAX_HP,
           this.state.playerCitadelHp + 875
         );
+        this.markNodeResolved(node.id);
         return true;
       case 'FORGE':
         // +10% persistent damage bonus for remaining run
         this.state.campaignDamageBonus =
           Math.round((this.state.campaignDamageBonus + 0.1) * 100) / 100;
+        this.markNodeResolved(node.id);
         return true;
       case 'INSPIRATION':
         // +50g opening tactical battle gold for next battle
         this.state.nextBattleBonusGold += 50;
+        this.markNodeResolved(node.id);
         return true;
     }
   }
@@ -336,7 +363,7 @@ export class CampaignManager {
    */
   public resolveEventChoice(eventId: string, choice: 'A' | 'B'): boolean {
     const node = this.getCurrentNode();
-    if (node.type !== 'EVENT' || this.state.isRunOver) {
+    if (node.type !== 'EVENT' || this.state.isRunOver || this.isNodeResolved(node.id)) {
       return false;
     }
 
@@ -361,6 +388,7 @@ export class CampaignManager {
             unownedQualifying[this.rng.nextInt(0, unownedQualifying.length)];
           this.state.activeRelicIds.push(picked);
         }
+        this.markNodeResolved(node.id);
         return true;
       } else {
         // Option B: -300 Citadel HP, +80 campaign gold
@@ -370,6 +398,7 @@ export class CampaignManager {
           this.state.isRunOver = true;
           this.state.isVictory = false;
         }
+        this.markNodeResolved(node.id);
         return true;
       }
     }
@@ -385,6 +414,7 @@ export class CampaignManager {
           this.state.isRunOver = true;
           this.state.isVictory = false;
         }
+        this.markNodeResolved(node.id);
         return true;
       } else {
         // Option B: -50 campaign gold, acquire relic_blessed_heavy_plating
@@ -394,6 +424,7 @@ export class CampaignManager {
         if (!this.state.activeRelicIds.includes('relic_blessed_heavy_plating')) {
           this.state.activeRelicIds.push('relic_blessed_heavy_plating');
         }
+        this.markNodeResolved(node.id);
         return true;
       }
     }
@@ -405,6 +436,7 @@ export class CampaignManager {
         if (this.state.campaignGold < cost) return false;
         this.state.campaignGold -= cost;
         this.state.nextBattleBonusGold += 100;
+        this.markNodeResolved(node.id);
         return true;
       } else {
         // Option B: 0 gold, restore +300 Citadel HP
@@ -412,6 +444,7 @@ export class CampaignManager {
           CITADEL_MAX_HP,
           this.state.playerCitadelHp + 300
         );
+        this.markNodeResolved(node.id);
         return true;
       }
     }
@@ -428,6 +461,10 @@ export class CampaignManager {
   }): void {
     if (this.state.isRunOver) return;
 
+    const current = this.getCurrentNode();
+    // P0-A: Prevent infinite battle farming on an already resolved node
+    if (this.isNodeResolved(current.id)) return;
+
     this.state.playerCitadelHp = result.playerCitadelFinalHp;
 
     if (!result.isPlayerWinner || this.state.playerCitadelHp <= 0) {
@@ -437,7 +474,8 @@ export class CampaignManager {
       return;
     }
 
-    const current = this.getCurrentNode();
+    this.markNodeResolved(current.id);
+
     switch (current.type) {
       case 'BATTLE':
         this.state.campaignGold += 50;
@@ -506,6 +544,7 @@ export class CampaignManager {
       state: {
         ...this.state,
         visitedNodeIds: [...this.state.visitedNodeIds],
+        resolvedNodeIds: [...this.state.resolvedNodeIds],
         activeRelicIds: [...this.state.activeRelicIds],
       },
       nodes: { ...this.nodes },
@@ -526,6 +565,9 @@ export class CampaignManager {
     manager.state = {
       ...data.state,
       visitedNodeIds: [...data.state.visitedNodeIds],
+      resolvedNodeIds: Array.isArray(data.state.resolvedNodeIds)
+        ? [...data.state.resolvedNodeIds]
+        : [],
       activeRelicIds: [...data.state.activeRelicIds],
     };
     manager.nodes = { ...data.nodes };

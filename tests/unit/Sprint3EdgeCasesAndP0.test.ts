@@ -5,6 +5,7 @@ import { AIController } from '../../src/core/ai/AIController';
 import { CombatResolver } from '../../src/core/systems/CombatResolver';
 import { getRelicDefinition } from '../../src/core/config/RelicsCatalog';
 import { CITADEL_MAX_HP } from '../../src/core/config/ArenaConfig';
+import { TacticalHud } from '../../src/ui/hud/TacticalHud';
 
 describe('Sprint 3: P0 Bugfixes & Comprehensive Edge Cases Suite', () => {
   // =========================================================================
@@ -815,19 +816,23 @@ describe('Sprint 3: P0 Bugfixes & Comprehensive Edge Cases Suite', () => {
     it('persists playerCitadelHp between battles and terminates run in defeat when citadelHp <= 0', () => {
       const manager = new CampaignManager(1234);
 
-      // Battle 1: Win with 1400 HP
+      // Battle 1: Win with 1400 HP on node_0_0
       manager.completeBattle({
         playerCitadelFinalHp: 1400,
         isPlayerWinner: true,
       });
       expect(manager.state.playerCitadelHp).toBe(1400);
       expect(manager.state.isRunOver).toBe(false);
+      expect(manager.isNodeResolved('node_0_0')).toBe(true);
 
       // Verify that options created for the next battle receive 1400 HP
       const opts = manager.createBattleEngineOptions();
       expect(opts.initialPlayerCitadelHp).toBe(1400);
 
-      // Battle 2: Defeat (0 HP)
+      // Advance to Layer 1 Battle (node_1_0)
+      expect(manager.travelToNode('node_1_0')).toBe(true);
+
+      // Battle 2 on node_1_0: Defeat (0 HP)
       manager.completeBattle({
         playerCitadelFinalHp: 0,
         isPlayerWinner: false,
@@ -837,47 +842,57 @@ describe('Sprint 3: P0 Bugfixes & Comprehensive Edge Cases Suite', () => {
       expect(manager.state.isVictory).toBe(false);
 
       // Subsequent actions must be blocked once run is over
-      expect(manager.travelToNode('node_1_0')).toBe(false);
+      expect(manager.travelToNode('node_2_0')).toBe(false);
     });
 
-    it('handles all 3 Campfire actions with accurate capping and bonus consumption', () => {
-      const manager = new CampaignManager(4567);
-      manager.state.currentNodeId = 'node_4_0'; // Set to Campfire
-
+    it('handles all 3 Campfire actions with accurate capping, bonus consumption, and single-use locking (P0-B)', () => {
       // 1. REPAIR: +875 HP clamped at 2500
-      manager.state.playerCitadelHp = 2000;
-      expect(manager.applyCampfireAction('REPAIR')).toBe(true);
-      expect(manager.state.playerCitadelHp).toBe(2500); // 2000 + 875 = 2875 clamped to 2500
+      const manager1 = new CampaignManager(4567);
+      manager1.state.currentNodeId = 'node_4_0'; // Set to Campfire
+      manager1.state.playerCitadelHp = 2000;
+      expect(manager1.applyCampfireAction('REPAIR')).toBe(true);
+      expect(manager1.state.playerCitadelHp).toBe(2500); // 2000 + 875 = 2875 clamped to 2500
+      expect(manager1.applyCampfireAction('REPAIR')).toBe(false); // Blocked on resolved node
 
-      // 2. FORGE: cumulative +0.10 damage bonus
-      expect(manager.applyCampfireAction('FORGE')).toBe(true);
-      expect(manager.state.campaignDamageBonus).toBe(0.1);
-      expect(manager.applyCampfireAction('FORGE')).toBe(true);
-      expect(manager.state.campaignDamageBonus).toBe(0.2);
+      // 2. FORGE: +0.10 damage bonus per Campfire visit
+      const manager2 = new CampaignManager(4568);
+      manager2.state.currentNodeId = 'node_4_0';
+      expect(manager2.applyCampfireAction('FORGE')).toBe(true);
+      expect(manager2.state.campaignDamageBonus).toBe(0.1);
+      expect(manager2.applyCampfireAction('FORGE')).toBe(false); // Blocked on resolved node
 
       // 3. INSPIRATION: +50g opening gold for next battle
-      expect(manager.applyCampfireAction('INSPIRATION')).toBe(true);
-      expect(manager.state.nextBattleBonusGold).toBe(50);
+      const manager3 = new CampaignManager(4569);
+      manager3.state.currentNodeId = 'node_4_0';
+      expect(manager3.applyCampfireAction('INSPIRATION')).toBe(true);
+      expect(manager3.state.nextBattleBonusGold).toBe(50);
+      expect(manager3.applyCampfireAction('INSPIRATION')).toBe(false);
 
-      const battleOpts = manager.createBattleEngineOptions();
+      // Travel to Layer 5 Battle/Elite node_5_0 and complete battle to consume nextBattleBonusGold
+      expect(manager3.travelToNode('node_5_0')).toBe(true);
+      const battleOpts = manager3.createBattleEngineOptions();
       expect(battleOpts.initialPlayerGold).toBe(120 + 50); // 170g opening
 
       // Once battle completes, nextBattleBonusGold resets to 0
-      manager.completeBattle({
+      manager3.completeBattle({
         playerCitadelFinalHp: 2500,
         isPlayerWinner: true,
       });
-      expect(manager.state.nextBattleBonusGold).toBe(0);
+      expect(manager3.state.nextBattleBonusGold).toBe(0);
     });
 
-    it('Merchant node: enforces rarity prices, prevents overspending, duplicate purchases, and caps emergency repair at 2500', () => {
+    it('Merchant node: enforces rarity prices, prevents overspending, duplicate purchases, caps emergency repair at 2500, and allows leaving without buying', () => {
       const manager = new CampaignManager(9999);
+      // Resolve node_0_0 and node_1_0 to reach Merchant node_2_1
+      manager.completeBattle({ playerCitadelFinalHp: 2200, isPlayerWinner: true });
+      expect(manager.travelToNode('node_1_0')).toBe(true);
+      manager.completeBattle({ playerCitadelFinalHp: 2200, isPlayerWinner: true });
       manager.state.campaignGold = 100;
       manager.state.playerCitadelHp = 2200;
-      manager.travelToNode('node_1_0');
-      manager.travelToNode('node_2_1'); // Merchant
+      expect(manager.travelToNode('node_2_1')).toBe(true); // Merchant
 
       expect(manager.merchantRelics.length).toBe(3);
+      expect(manager.isNodeResolved('node_2_1')).toBe(true);
 
       // Emergency repair (40g -> +500 HP clamped at 2500)
       expect(manager.buyMerchantRepair()).toBe(true);
@@ -908,70 +923,86 @@ describe('Sprint 3: P0 Bugfixes & Comprehensive Edge Cases Suite', () => {
       expect(manager.buyMerchantRelic(targetRelic)).toBe(false);
     });
 
-    it('Crossroads Events: resolves both Option A and Option B for all 3 events with failure and game-over conditions', () => {
-      const manager = new CampaignManager(3333);
-      manager.state.currentNodeId = 'node_1_1'; // EVENT
-
+    it('Crossroads Events: resolves both Option A and Option B for all 3 events with failure, single-use lock, and game-over conditions', () => {
       // ---------------------------------------------------------------------
       // Event 1: event_supply_convoy
       // Option A: 30g -> random uncommon/rare relic
-      manager.state.campaignGold = 20; // insufficient (< 30)
-      expect(manager.resolveEventChoice('event_supply_convoy', 'A')).toBe(false);
+      const m1A = new CampaignManager(3331);
+      m1A.state.currentNodeId = 'node_1_1'; // EVENT
+      m1A.state.campaignGold = 20; // insufficient (< 30) -> returns false and does NOT resolve node
+      expect(m1A.resolveEventChoice('event_supply_convoy', 'A')).toBe(false);
+      expect(m1A.isNodeResolved('node_1_1')).toBe(false);
 
-      manager.state.campaignGold = 30;
-      expect(manager.resolveEventChoice('event_supply_convoy', 'A')).toBe(true);
-      expect(manager.state.campaignGold).toBe(0);
-      expect(manager.state.activeRelicIds.length).toBe(1);
+      m1A.state.campaignGold = 30;
+      expect(m1A.resolveEventChoice('event_supply_convoy', 'A')).toBe(true);
+      expect(m1A.state.campaignGold).toBe(0);
+      expect(m1A.state.activeRelicIds.length).toBe(1);
+      expect(m1A.isNodeResolved('node_1_1')).toBe(true);
+      // Calling again on resolved node returns false
+      expect(m1A.resolveEventChoice('event_supply_convoy', 'B')).toBe(false);
 
-      // Option B: -300 HP -> +80g
-      manager.state.playerCitadelHp = 250; // less than 300 HP -> will lead to defeat!
-      expect(manager.resolveEventChoice('event_supply_convoy', 'B')).toBe(true);
-      expect(manager.state.playerCitadelHp).toBe(0);
-      expect(manager.state.isRunOver).toBe(true);
-      expect(manager.state.isVictory).toBe(false);
-
-      // Reset for Event 2
-      const manager2 = new CampaignManager(4444);
-      manager2.state.currentNodeId = 'node_1_1';
+      // Option B: -300 HP -> +80g (with fatal HP check)
+      const m1B = new CampaignManager(3332);
+      m1B.state.currentNodeId = 'node_1_1';
+      m1B.state.playerCitadelHp = 250; // less than 300 HP -> will lead to defeat!
+      expect(m1B.resolveEventChoice('event_supply_convoy', 'B')).toBe(true);
+      expect(m1B.state.playerCitadelHp).toBe(0);
+      expect(m1B.state.isRunOver).toBe(true);
+      expect(m1B.state.isVictory).toBe(false);
 
       // ---------------------------------------------------------------------
       // Event 2: event_profaned_sanctuary
       // Option A: -400 HP -> relic_solar_martyrdom
-      manager2.state.playerCitadelHp = 1000;
-      expect(manager2.resolveEventChoice('event_profaned_sanctuary', 'A')).toBe(true);
-      expect(manager2.state.playerCitadelHp).toBe(600);
-      expect(manager2.state.activeRelicIds).toContain('relic_solar_martyrdom');
+      const m2A = new CampaignManager(4441);
+      m2A.state.currentNodeId = 'node_1_1';
+      m2A.state.playerCitadelHp = 1000;
+      expect(m2A.resolveEventChoice('event_profaned_sanctuary', 'A')).toBe(true);
+      expect(m2A.state.playerCitadelHp).toBe(600);
+      expect(m2A.state.activeRelicIds).toContain('relic_solar_martyrdom');
+      expect(m2A.resolveEventChoice('event_profaned_sanctuary', 'A')).toBe(false);
 
       // Option B: -50g -> relic_blessed_heavy_plating
-      manager2.state.campaignGold = 40; // insufficient
-      expect(manager2.resolveEventChoice('event_profaned_sanctuary', 'B')).toBe(false);
+      const m2B = new CampaignManager(4442);
+      m2B.state.currentNodeId = 'node_1_1';
+      m2B.state.campaignGold = 40; // insufficient -> does not resolve
+      expect(m2B.resolveEventChoice('event_profaned_sanctuary', 'B')).toBe(false);
+      expect(m2B.isNodeResolved('node_1_1')).toBe(false);
 
-      manager2.state.campaignGold = 50;
-      expect(manager2.resolveEventChoice('event_profaned_sanctuary', 'B')).toBe(true);
-      expect(manager2.state.campaignGold).toBe(0);
-      expect(manager2.state.activeRelicIds).toContain('relic_blessed_heavy_plating');
+      m2B.state.campaignGold = 50;
+      expect(m2B.resolveEventChoice('event_profaned_sanctuary', 'B')).toBe(true);
+      expect(m2B.state.campaignGold).toBe(0);
+      expect(m2B.state.activeRelicIds).toContain('relic_blessed_heavy_plating');
+      expect(m2B.isNodeResolved('node_1_1')).toBe(true);
 
       // ---------------------------------------------------------------------
       // Event 3: event_iron_guard_deserter
       // Option A: -40g -> +100g next battle opening gold
-      manager2.state.campaignGold = 35; // insufficient
-      expect(manager2.resolveEventChoice('event_iron_guard_deserter', 'A')).toBe(false);
+      const m3A = new CampaignManager(4443);
+      m3A.state.currentNodeId = 'node_1_1';
+      m3A.state.campaignGold = 35; // insufficient
+      expect(m3A.resolveEventChoice('event_iron_guard_deserter', 'A')).toBe(false);
+      expect(m3A.isNodeResolved('node_1_1')).toBe(false);
 
-      manager2.state.campaignGold = 40;
-      expect(manager2.resolveEventChoice('event_iron_guard_deserter', 'A')).toBe(true);
-      expect(manager2.state.campaignGold).toBe(0);
-      expect(manager2.state.nextBattleBonusGold).toBe(100);
+      m3A.state.campaignGold = 40;
+      expect(m3A.resolveEventChoice('event_iron_guard_deserter', 'A')).toBe(true);
+      expect(m3A.state.campaignGold).toBe(0);
+      expect(m3A.state.nextBattleBonusGold).toBe(100);
+      expect(m3A.isNodeResolved('node_1_1')).toBe(true);
 
       // Option B: 0g -> +300 HP clamped at 2500
-      manager2.state.playerCitadelHp = 2400;
-      expect(manager2.resolveEventChoice('event_iron_guard_deserter', 'B')).toBe(true);
-      expect(manager2.state.playerCitadelHp).toBe(2500); // 2400 + 300 clamped to 2500
+      const m3B = new CampaignManager(4444);
+      m3B.state.currentNodeId = 'node_1_1';
+      m3B.state.playerCitadelHp = 2400;
+      expect(m3B.resolveEventChoice('event_iron_guard_deserter', 'B')).toBe(true);
+      expect(m3B.state.playerCitadelHp).toBe(2500); // 2400 + 300 clamped to 2500
+      expect(m3B.isNodeResolved('node_1_1')).toBe(true);
     });
 
-    it('deterministic serialization and deserialization retains complete game state and RNG sequence', () => {
+    it('deterministic serialization and deserialization retains complete game state, resolvedNodeIds, and RNG sequence', () => {
       const manager = new CampaignManager(88888);
-      manager.travelToNode('node_1_1'); // Event node
-      manager.resolveEventChoice('event_supply_convoy', 'B'); // -300 HP, +80g
+      manager.completeBattle({ playerCitadelFinalHp: 2300, isPlayerWinner: true });
+      expect(manager.travelToNode('node_1_1')).toBe(true); // Event node
+      expect(manager.resolveEventChoice('event_supply_convoy', 'B')).toBe(true); // -300 HP, +80g
       manager.state.campaignDamageBonus = 0.3;
       manager.state.nextBattleBonusGold = 100;
       manager.state.activeRelicIds = ['relic_flaming_dawn_bolts', 'relic_blood_and_soil_banner'];
@@ -982,6 +1013,9 @@ describe('Sprint 3: P0 Bugfixes & Comprehensive Edge Cases Suite', () => {
       expect(restored.state.runSeed).toBe(88888);
       expect(restored.state.currentLayer).toBe(1);
       expect(restored.state.currentNodeId).toBe('node_1_1');
+      expect(restored.state.resolvedNodeIds).toEqual(['node_0_0', 'node_1_1']);
+      expect(restored.isNodeResolved('node_0_0')).toBe(true);
+      expect(restored.isNodeResolved('node_1_1')).toBe(true);
       expect(restored.state.playerCitadelHp).toBe(manager.state.playerCitadelHp);
       expect(restored.state.campaignGold).toBe(manager.state.campaignGold);
       expect(restored.state.campaignDamageBonus).toBe(0.3);
@@ -995,6 +1029,155 @@ describe('Sprint 3: P0 Bugfixes & Comprehensive Edge Cases Suite', () => {
       const nextOriginal = (manager as any).rng.next();
       const nextRestored = (restored as any).rng.next();
       expect(nextRestored).toBe(nextOriginal);
+    });
+  });
+
+  // =========================================================================
+  // 4. SPRINT 3 GD HOTFIX SUITE (CA-Hotfix-1 TO CA-Hotfix-6)
+  // =========================================================================
+  describe('Sprint 3 GD Hotfix: P0-A, P0-B & P0-C Acceptance Criteria', () => {
+    it('[CA-Hotfix-1] Calling travelToNode before resolving currentNodeId (e.g. starting at node_0_0 without completing battle) returns false and getAvailableNextNodes returns []', () => {
+      const manager = new CampaignManager(2026);
+      expect(manager.state.currentNodeId).toBe('node_0_0');
+      expect(manager.isNodeResolved('node_0_0')).toBe(false);
+      expect(manager.getAvailableNextNodes()).toEqual([]);
+
+      // Attempting to skip Layer 0 battle must return false
+      expect(manager.travelToNode('node_1_0')).toBe(false);
+      expect(manager.travelToNode('node_1_1')).toBe(false);
+      expect(manager.state.currentNodeId).toBe('node_0_0');
+
+      // Completing the battle resolves node_0_0 and unlocks Layer 1
+      manager.completeBattle({ playerCitadelFinalHp: 2200, isPlayerWinner: true });
+      expect(manager.isNodeResolved('node_0_0')).toBe(true);
+      expect(manager.getAvailableNextNodes().map((n) => n.id)).toEqual(['node_1_0', 'node_1_1']);
+
+      // Calling completeBattle a second time on already resolved node_0_0 is ignored (no infinite farming!)
+      const goldAfterFirstWin = manager.state.campaignGold;
+      manager.chooseRewardRelic(manager.rewardRelicChoices[0]);
+      manager.completeBattle({ playerCitadelFinalHp: 2200, isPlayerWinner: true });
+      expect(manager.state.campaignGold).toBe(goldAfterFirstWin);
+      expect(manager.rewardRelicChoices.length).toBe(0);
+    });
+
+    it('[CA-Hotfix-2] Executing any Campfire action resolves the node immediately; subsequent calls on the same node return false', () => {
+      const manager = new CampaignManager(2027);
+      // Advance to Layer 4 Campfire (node_4_0) by resolving path node_0_0 -> node_1_0 -> node_2_0 -> node_3_0 -> node_4_0
+      manager.completeBattle({ playerCitadelFinalHp: 2000, isPlayerWinner: true });
+      expect(manager.travelToNode('node_1_0')).toBe(true);
+      manager.completeBattle({ playerCitadelFinalHp: 1800, isPlayerWinner: true });
+      expect(manager.travelToNode('node_2_0')).toBe(true);
+      manager.completeBattle({ playerCitadelFinalHp: 1600, isPlayerWinner: true });
+      expect(manager.travelToNode('node_3_0')).toBe(true);
+      manager.completeBattle({ playerCitadelFinalHp: 1400, isPlayerWinner: true });
+      expect(manager.travelToNode('node_4_0')).toBe(true);
+
+      // Before using Campfire, cannot advance to Layer 5
+      expect(manager.isNodeResolved('node_4_0')).toBe(false);
+      expect(manager.travelToNode('node_5_0')).toBe(false);
+
+      // Execute FORGE once
+      expect(manager.applyCampfireAction('FORGE')).toBe(true);
+      expect(manager.state.campaignDamageBonus).toBe(0.1);
+      expect(manager.isNodeResolved('node_4_0')).toBe(true);
+
+      // Subsequent calls to any Campfire action on node_4_0 must return false
+      expect(manager.applyCampfireAction('FORGE')).toBe(false);
+      expect(manager.applyCampfireAction('REPAIR')).toBe(false);
+      expect(manager.applyCampfireAction('INSPIRATION')).toBe(false);
+      expect(manager.state.campaignDamageBonus).toBe(0.1);
+      expect(manager.state.playerCitadelHp).toBe(1400);
+      expect(manager.state.nextBattleBonusGold).toBe(0);
+
+      // Now can advance to Layer 5
+      expect(manager.travelToNode('node_5_0')).toBe(true);
+    });
+
+    it('[CA-Hotfix-3] Resolving any valid Event option (A or B) resolves the node immediately; subsequent calls on the same node return false', () => {
+      const manager = new CampaignManager(2028);
+      manager.completeBattle({ playerCitadelFinalHp: 2100, isPlayerWinner: true });
+      expect(manager.travelToNode('node_1_1')).toBe(true); // EVENT node
+
+      // Cannot leave Event node before resolving it
+      expect(manager.isNodeResolved('node_1_1')).toBe(false);
+      expect(manager.travelToNode('node_2_1')).toBe(false);
+
+      const eventId = manager.getCurrentNode().eventId!;
+      expect(manager.resolveEventChoice(eventId, 'B')).toBe(true);
+      expect(manager.isNodeResolved('node_1_1')).toBe(true);
+
+      // Subsequent calls to resolveEventChoice on node_1_1 must return false
+      const hpAfterFirst = manager.state.playerCitadelHp;
+      const goldAfterFirst = manager.state.campaignGold;
+      expect(manager.resolveEventChoice(eventId, 'A')).toBe(false);
+      expect(manager.resolveEventChoice(eventId, 'B')).toBe(false);
+      expect(manager.state.playerCitadelHp).toBe(hpAfterFirst);
+      expect(manager.state.campaignGold).toBe(goldAfterFirst);
+
+      // Now can advance to Layer 2
+      expect(manager.travelToNode('node_2_1')).toBe(true);
+    });
+
+    it('[CA-Hotfix-4] Traveling to a MERCHANT node marks it resolved on arrival so the player can leave for the next layer even without buying anything', () => {
+      const manager = new CampaignManager(2029);
+      manager.completeBattle({ playerCitadelFinalHp: 2300, isPlayerWinner: true });
+      expect(manager.travelToNode('node_1_0')).toBe(true);
+      manager.completeBattle({ playerCitadelFinalHp: 2200, isPlayerWinner: true });
+
+      // Travel to Layer 2 Merchant (node_2_1)
+      expect(manager.travelToNode('node_2_1')).toBe(true);
+      expect(manager.getCurrentNode().type).toBe('MERCHANT');
+      expect(manager.isNodeResolved('node_2_1')).toBe(true);
+
+      // Without buying any relic or repair, player can immediately travel to Layer 3 (node_3_0)
+      expect(manager.getAvailableNextNodes().map((n) => n.id)).toEqual(['node_3_0', 'node_3_1']);
+      expect(manager.travelToNode('node_3_0')).toBe(true);
+      expect(manager.state.currentNodeId).toBe('node_3_0');
+    });
+
+    it('[CA-Hotfix-5] resolvedNodeIds is persisted and restored with 100% fidelity in serialize() and deserialize()', () => {
+      const manager = new CampaignManager(2030);
+      manager.completeBattle({ playerCitadelFinalHp: 2000, isPlayerWinner: true });
+      expect(manager.travelToNode('node_1_0')).toBe(true);
+
+      // At this point: node_0_0 is resolved, node_1_0 is visited but NOT resolved
+      const json = manager.serialize();
+      const restored = CampaignManager.deserialize(json);
+
+      expect(restored.state.resolvedNodeIds).toEqual(['node_0_0']);
+      expect(restored.isNodeResolved('node_0_0')).toBe(true);
+      expect(restored.isNodeResolved('node_1_0')).toBe(false);
+      // Restored manager must still block advancing from unresolved node_1_0
+      expect(restored.travelToNode('node_2_0')).toBe(false);
+    });
+
+    it('[CA-Hotfix-6] TacticalHud suppresses native Skirmish GameOver modal during Campaign battles and exposes hideGameOverModal()', () => {
+      const mockHudContext = {
+        elGameOverModal: { style: { display: 'none' } },
+        elGameOverTitle: { textContent: '', style: { color: '' } },
+        elGameOverDesc: { textContent: '' },
+      };
+
+      const updateGameOverFn = (TacticalHud.prototype as any).updateGameOver.bind(mockHudContext);
+      const hideGameOverModalFn = TacticalHud.prototype.hideGameOverModal.bind(mockHudContext as any);
+
+      const gameOverSnapshot = {
+        isGameOver: true,
+        winnerTeam: 'PLAYER',
+        timeSeconds: 45.2,
+      };
+
+      // 1. During Campaign Battle (suppressGameOverModal = true): modal must NOT open
+      updateGameOverFn(gameOverSnapshot, true);
+      expect(mockHudContext.elGameOverModal.style.display).toBe('none');
+
+      // 2. During Skirmish Battle (suppressGameOverModal = false): modal opens normally
+      updateGameOverFn(gameOverSnapshot, false);
+      expect(mockHudContext.elGameOverModal.style.display).toBe('flex');
+
+      // 3. Explicit hideGameOverModal() hides it immediately
+      hideGameOverModalFn();
+      expect(mockHudContext.elGameOverModal.style.display).toBe('none');
     });
   });
 });

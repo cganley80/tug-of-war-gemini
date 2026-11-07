@@ -5,8 +5,8 @@
 > **Repositório (Single Source of Truth):** `cganley80/tug-of-war-gemini`  
 > **Destinatário:** Game Systems & Balance Designer (GD)  
 > **Emitente:** Gerente de Projetos (GP) & Arquiteto Chefe  
-> **Referência Normativa:** [`docs/SPRINT_3_GD_SPEC.md`](./SPRINT_3_GD_SPEC.md), [`docs/GDD.md`](./GDD.md) (v1.1) & [`docs/GOVERNANCE.md`](./GOVERNANCE.md)  
-> **Status da Sprint 3 & Marco MVP:** **100% Concluído e Validado em QA (150/150 Testes Verdes)**  
+> **Referência Normativa:** [`docs/SPRINT_3_GD_SPEC.md`](./SPRINT_3_GD_SPEC.md), [`docs/SPRINT_3_GD_AUDIT_AND_HOTFIX.md`](./SPRINT_3_GD_AUDIT_AND_HOTFIX.md), [`docs/GDD.md`](./GDD.md) (v1.1) & [`docs/GOVERNANCE.md`](./GOVERNANCE.md)  
+> **Status da Sprint 3, Hotfix P0 & Marco MVP:** **100% Concluído e Validado em QA (156/156 Testes Verdes)**  
 
 ---
 
@@ -74,13 +74,25 @@ Implementado em [`src/core/campaign/CampaignManager.ts`](../src/core/campaign/Ca
 
 ---
 
-## 5. Resultados Consolidados da Suíte Automatizada de QA (150/150 Verdes)
+## 5. Resolução do Hotfix P0 de Fechamento do Loop da Campanha (`SPRINT_3_GD_AUDIT_AND_HOTFIX.md`)
+
+Em resposta imediata à auditoria de fechamento de loop de campanha publicada pelo Game Designer em [`docs/SPRINT_3_GD_AUDIT_AND_HOTFIX.md`](./SPRINT_3_GD_AUDIT_AND_HOTFIX.md), os 3 bloqueadores `P0-A`, `P0-B` e `P0-C` e todos os 6 critérios de aceite (`CA-Hotfix-1` a `CA-Hotfix-6`) foram implementados e cobertos por testes automatizados:
+
+| Bloqueador P0 | Problema Apontado pelo GD | Solução Implementada | Critérios Validados |
+| :--- | :--- | :--- | :---: |
+| **P0-A: Progressão de Nós Sem Resolução & Farming Infinito de Batalhas** | `travelToNode()` não exigia resolução do nó atual; `completeBattle()` permitia re-jogar batalhas vencidas infinitamente. | Adicionado `resolvedNodeIds: string[]` em [`CampaignState`](../src/core/types.ts) e `isNodeResolved()` em [`CampaignManager.ts`](../src/core/campaign/CampaignManager.ts). `getAvailableNextNodes()` e `travelToNode()` exigem `isNodeResolved(current.id) === true`. Nós `MERCHANT` são marcados resolvidos na chegada (compra opcional). `completeBattle()` ignora chamadas duplicadas em nós já resolvidos. | ✅ `CA-Hotfix-1`, `CA-Hotfix-4`, `CA-Hotfix-5` |
+| **P0-B: Exploit de Fogueira Infinita & Eventos Infinitos** | `applyCampfireAction()` e `resolveEventChoice()` podiam ser invocados repetidamente no mesmo nó. | `applyCampfireAction()` e `resolveEventChoice()` verificam `if (this.isNodeResolved(node.id)) return false;` e gravam `node.id` em `resolvedNodeIds` imediatamente após a primeira resolução válida. Em [`CampaignOverlay.ts`](../src/ui/screens/CampaignOverlay.ts), nós resolvidos ocultam o botão de reabertura e exibem o selo `✓ Nó Concluído — Selecione o próximo destino`. | ✅ `CA-Hotfix-2`, `CA-Hotfix-3` |
+| **P0-C: Conflito de `z-index` no GameOver Modal & Ejeção Acidental para Skirmish** | `elGameOverModal` do HUD Tático (`z-index: 9999`) sobrepunha o `#campaign-overlay` (`z-index: 9998`) e ejetava o jogador para Skirmish. | `z-index` de `#campaign-overlay` elevado para `10000` em [`CampaignOverlay.ts`](../src/ui/screens/CampaignOverlay.ts). Em [`TacticalHud.ts`](../src/ui/hud/TacticalHud.ts) e [`main.ts`](../src/main.ts), `hud.update(..., isCampaignBattle)` suprime o modal nativo de Skirmish durante batalhas da Campanha e `hud.hideGameOverModal()` garante limpeza imediata. | ✅ `CA-Hotfix-6` |
+
+---
+
+## 6. Resultados Consolidados da Suíte Automatizada de QA (156/156 Verdes)
 
 | Arquivo de Teste | Testes | Escopo Principal | Status |
 | :--- | :---: | :--- | :---: |
 | [`tests/unit/Sprint2AbilitiesAndAI.test.ts`](../tests/unit/Sprint2AbilitiesAndAI.test.ts) | 34 | 10 Habilidades de Unidades, Y-Steering, Splash, Knockback, 4 Perfis de IA e Interpolador 60 FPS. | ✅ Passou |
+| [`tests/unit/Sprint3EdgeCasesAndP0.test.ts`](../tests/unit/Sprint3EdgeCasesAndP0.test.ts) | 27 | **P0-1 (Save Gold)**, casos de borda das 8 Relíquias, nós de Campanha e **Suíte Completa do Hotfix (`CA-Hotfix-1` a `CA-Hotfix-6`)**. | ✅ Passou |
 | [`tests/unit/CombatResolver.test.ts`](../tests/unit/CombatResolver.test.ts) | 22 | 16 cruzamentos da Matriz 4x4, 3 Exemplos da Seção 4.2, piso mínimo de 1 dano e passivas. | ✅ Passou |
-| [`tests/unit/Sprint3EdgeCasesAndP0.test.ts`](../tests/unit/Sprint3EdgeCasesAndP0.test.ts) | 21 | **P0-1 (Save Gold)** em aberturas e contra-ataques, casos de borda das 8 Relíquias e nós de Campanha. | ✅ Passou |
 | [`tests/unit/Sprint2CoreAndAI.test.ts`](../tests/unit/Sprint2CoreAndAI.test.ts) | 19 | Mecânicas de Cerco, Poça de Fogo Grego, Aura de Devoção, Supernova e perfis de IA. | ✅ Passou |
 | [`tests/unit/Sprint3RelicsAndCampaign.test.ts`](../tests/unit/Sprint3RelicsAndCampaign.test.ts) | 18 | Efeitos matemáticos das 8 Relíquias, DAG de 7 camadas, Fogueira, Mercador, Eventos e serialização JSON. | ✅ Passou |
 | [`tests/unit/GridAndEvents.test.ts`](../tests/unit/GridAndEvents.test.ts) | 14 | Grid 4x3, preservação do timer de spawn no upgrade N1 $\to$ N2 e emissão dos 7 Eventos de Domínio. | ✅ Passou |
@@ -90,4 +102,4 @@ Implementado em [`src/core/campaign/CampaignManager.ts`](../src/core/campaign/Ca
 | [`tests/unit/Economy.test.ts`](../tests/unit/Economy.test.ts) | 3 | Invariância econômica em 30s, reembolso de 60% na venda e progressão da Mina Real (N0-N4). | ✅ Passou |
 | [`tests/unit/SeededRNG.test.ts`](../tests/unit/SeededRNG.test.ts) | 3 | Determinismo da sequência `Mulberry32` e restauração de estado. | ✅ Passou |
 | [`tests/performance/StressTest200Units.test.ts`](../tests/performance/StressTest200Units.test.ts) | 1 | **Stress Test (P0-3):** 200 unidades simultâneas em combate ativo com média **`< 5.0ms` por tick**. | ✅ Passou |
-| **TOTAL (12 Arquivos de Teste)** | **150** | **Cobertura Integral das Sprints 1, 2 e 3 (Marco MVP)** | **100% Aprovado** |
+| **TOTAL (12 Arquivos de Teste)** | **156** | **Cobertura Integral das Sprints 1, 2, 3 e Hotfix P0 (Marco MVP)** | **100% Aprovado** |

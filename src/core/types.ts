@@ -198,6 +198,7 @@ export interface CampaignState {
   currentLayer: number; // 0..6
   currentNodeId: string;
   visitedNodeIds: string[];
+  resolvedNodeIds: string[];
 
   // Vital persistence
   playerCitadelHp: number; // Max 2500

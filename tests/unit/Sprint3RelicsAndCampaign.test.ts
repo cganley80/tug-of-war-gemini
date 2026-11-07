@@ -387,14 +387,23 @@ describe('Sprint 3: Core, AI P0 Fixes, Relics and Campaign Roguelike', () => {
       expect(nodes['node_6_0'].outgoingNodeIds).toEqual([]);
     });
 
-    it('Enforces DAG travel rules and tracks player movement', () => {
+    it('Enforces DAG travel rules, requires node resolution before advancing, and tracks player movement', () => {
       const manager = new CampaignManager(12345);
       expect(manager.getCurrentNode().id).toBe('node_0_0');
 
       // Cannot jump directly to layer 2
       expect(manager.travelToNode('node_2_0')).toBe(false);
 
-      // Can travel to connected Layer 1 node
+      // P0-A: Cannot travel to connected Layer 1 node BEFORE resolving current node (node_0_0)
+      expect(manager.getAvailableNextNodes()).toEqual([]);
+      expect(manager.travelToNode('node_1_1')).toBe(false);
+
+      // Resolve Layer 0 battle node
+      manager.completeBattle({ playerCitadelFinalHp: 2400, isPlayerWinner: true });
+      expect(manager.isNodeResolved('node_0_0')).toBe(true);
+      expect(manager.getAvailableNextNodes().map((n) => n.id)).toEqual(['node_1_0', 'node_1_1']);
+
+      // Now can travel to connected Layer 1 node
       expect(manager.travelToNode('node_1_1')).toBe(true);
       expect(manager.getCurrentNode().id).toBe('node_1_1');
       expect(manager.state.currentLayer).toBe(1);
@@ -431,36 +440,51 @@ describe('Sprint 3: Core, AI P0 Fixes, Relics and Campaign Roguelike', () => {
       expect(engineOpts.activeRelics).toContain(chosenRelic);
     });
 
-    it('Campfire node executes Repair, Forge and Inspiration accurately', () => {
-      const manager = new CampaignManager(777);
-      manager.state.playerCitadelHp = 1000;
-      manager.state.currentNodeId = 'node_4_0'; // Campfire
+    it('Campfire node executes Repair, Forge and Inspiration accurately and locks after single use (P0-B)', () => {
+      // 1. Test REPAIR: +875 HP capped at 2500
+      const managerRepair = new CampaignManager(777);
+      managerRepair.state.playerCitadelHp = 1000;
+      managerRepair.state.currentNodeId = 'node_4_0'; // Campfire
+      expect(managerRepair.applyCampfireAction('REPAIR')).toBe(true);
+      expect(managerRepair.state.playerCitadelHp).toBe(1875);
+      // Subsequent action on same Campfire node must be blocked (P0-B)
+      expect(managerRepair.applyCampfireAction('REPAIR')).toBe(false);
+      expect(managerRepair.applyCampfireAction('FORGE')).toBe(false);
 
-      // Test REPAIR: +875 HP capped at 2500
-      expect(manager.applyCampfireAction('REPAIR')).toBe(true);
-      expect(manager.state.playerCitadelHp).toBe(1875);
+      // 2. Test FORGE: +0.10 damage bonus
+      const managerForge = new CampaignManager(778);
+      managerForge.state.currentNodeId = 'node_4_0';
+      expect(managerForge.applyCampfireAction('FORGE')).toBe(true);
+      expect(managerForge.state.campaignDamageBonus).toBe(0.1);
+      expect(managerForge.applyCampfireAction('FORGE')).toBe(false);
 
-      // Test FORGE: +0.10 damage bonus
-      expect(manager.applyCampfireAction('FORGE')).toBe(true);
-      expect(manager.state.campaignDamageBonus).toBe(0.1);
-
-      // Test INSPIRATION: +50g opening gold
-      expect(manager.applyCampfireAction('INSPIRATION')).toBe(true);
-      expect(manager.state.nextBattleBonusGold).toBe(50);
+      // 3. Test INSPIRATION: +50g opening gold
+      const managerInsp = new CampaignManager(779);
+      managerInsp.state.currentNodeId = 'node_4_0';
+      expect(managerInsp.applyCampfireAction('INSPIRATION')).toBe(true);
+      expect(managerInsp.state.nextBattleBonusGold).toBe(50);
+      expect(managerInsp.applyCampfireAction('INSPIRATION')).toBe(false);
     });
 
-    it('Merchant node allows buying relics and emergency citadel repairs', () => {
+    it('Merchant node allows buying relics, emergency citadel repairs, and optional exit without buying (P0-A)', () => {
       const manager = new CampaignManager(888);
-      manager.state.campaignGold = 200;
       manager.state.playerCitadelHp = 1500;
-      manager.travelToNode('node_1_0');
-      manager.travelToNode('node_2_1'); // Merchant node
+      // Resolve node_0_0 and node_1_0 before traveling to Merchant node_2_1
+      manager.completeBattle({ playerCitadelFinalHp: 1500, isPlayerWinner: true });
+      expect(manager.travelToNode('node_1_0')).toBe(true);
+      manager.completeBattle({ playerCitadelFinalHp: 1500, isPlayerWinner: true });
+      manager.state.campaignGold = 300;
+      expect(manager.travelToNode('node_2_1')).toBe(true); // Merchant node
+
+      // Merchant node is immediately marked resolved on arrival so player can leave optionally
+      expect(manager.isNodeResolved('node_2_1')).toBe(true);
+      expect(manager.getAvailableNextNodes().length).toBeGreaterThan(0);
 
       expect(manager.merchantRelics.length).toBe(3);
 
       // Buy emergency repair: 40g for +500 HP
       expect(manager.buyMerchantRepair()).toBe(true);
-      expect(manager.state.campaignGold).toBe(160);
+      expect(manager.state.campaignGold).toBe(260);
       expect(manager.state.playerCitadelHp).toBe(2000);
 
       // Buy a relic
@@ -468,49 +492,61 @@ describe('Sprint 3: Core, AI P0 Fixes, Relics and Campaign Roguelike', () => {
       const relicDef = getRelicDefinition(relicToBuy);
       expect(manager.buyMerchantRelic(relicToBuy)).toBe(true);
       expect(manager.state.activeRelicIds).toContain(relicToBuy);
-      expect(manager.state.campaignGold).toBe(160 - relicDef.merchantCostGold);
+      expect(manager.state.campaignGold).toBe(260 - relicDef.merchantCostGold);
     });
 
-    it('Resolves all 3 Canonical Crossroads Events correctly', () => {
-      const manager = new CampaignManager(999);
-      manager.state.currentNodeId = 'node_1_1'; // EVENT node
+    it('Resolves all 3 Canonical Crossroads Events correctly and locks event node after single resolution (P0-B)', () => {
+      // Event 1: Supply Convoy Option A (30g for 1 uncommon/rare relic)
+      const m1A = new CampaignManager(991);
+      m1A.state.currentNodeId = 'node_1_1';
+      m1A.state.campaignGold = 50;
+      expect(m1A.resolveEventChoice('event_supply_convoy', 'A')).toBe(true);
+      expect(m1A.state.campaignGold).toBe(20);
+      expect(m1A.state.activeRelicIds.length).toBe(1);
+      // P0-B: Cannot resolve again on the same node
+      expect(m1A.resolveEventChoice('event_supply_convoy', 'B')).toBe(false);
 
-      // Event 1: Supply Convoy
-      // Option A: 30g for 1 uncommon/rare relic
-      manager.state.campaignGold = 50;
-      expect(manager.resolveEventChoice('event_supply_convoy', 'A')).toBe(true);
-      expect(manager.state.campaignGold).toBe(20);
-      expect(manager.state.activeRelicIds.length).toBe(1);
+      // Event 1: Supply Convoy Option B (-300 HP for +80g)
+      const m1B = new CampaignManager(992);
+      m1B.state.currentNodeId = 'node_1_1';
+      m1B.state.campaignGold = 20;
+      m1B.state.playerCitadelHp = 2000;
+      expect(m1B.resolveEventChoice('event_supply_convoy', 'B')).toBe(true);
+      expect(m1B.state.playerCitadelHp).toBe(1700);
+      expect(m1B.state.campaignGold).toBe(100);
+      expect(m1B.resolveEventChoice('event_supply_convoy', 'B')).toBe(false);
 
-      // Option B: -300 HP for +80g
-      manager.state.playerCitadelHp = 2000;
-      expect(manager.resolveEventChoice('event_supply_convoy', 'B')).toBe(true);
-      expect(manager.state.playerCitadelHp).toBe(1700);
-      expect(manager.state.campaignGold).toBe(100);
+      // Event 2: Profaned Sanctuary Option A (-400 HP for relic_solar_martyrdom)
+      const m2A = new CampaignManager(993);
+      m2A.state.currentNodeId = 'node_1_1';
+      m2A.state.playerCitadelHp = 1700;
+      expect(m2A.resolveEventChoice('event_profaned_sanctuary', 'A')).toBe(true);
+      expect(m2A.state.playerCitadelHp).toBe(1300);
+      expect(m2A.state.activeRelicIds).toContain('relic_solar_martyrdom');
+      expect(m2A.resolveEventChoice('event_profaned_sanctuary', 'A')).toBe(false);
 
-      // Event 2: Profaned Sanctuary
-      // Option A: -400 HP for relic_solar_martyrdom
-      expect(manager.resolveEventChoice('event_profaned_sanctuary', 'A')).toBe(true);
-      expect(manager.state.playerCitadelHp).toBe(1300);
-      expect(manager.state.activeRelicIds).toContain('relic_solar_martyrdom');
+      // Event 2: Profaned Sanctuary Option B (-50g for relic_blessed_heavy_plating)
+      const m2B = new CampaignManager(994);
+      m2B.state.currentNodeId = 'node_1_1';
+      m2B.state.campaignGold = 60;
+      expect(m2B.resolveEventChoice('event_profaned_sanctuary', 'B')).toBe(true);
+      expect(m2B.state.campaignGold).toBe(10);
+      expect(m2B.state.activeRelicIds).toContain('relic_blessed_heavy_plating');
 
-      // Option B: -50g for relic_blessed_heavy_plating
-      manager.state.campaignGold = 60;
-      expect(manager.resolveEventChoice('event_profaned_sanctuary', 'B')).toBe(true);
-      expect(manager.state.campaignGold).toBe(10);
-      expect(manager.state.activeRelicIds).toContain('relic_blessed_heavy_plating');
+      // Event 3: Iron Guard Deserter Option A (-40g for +100g next battle opening gold)
+      const m3A = new CampaignManager(995);
+      m3A.state.currentNodeId = 'node_1_1';
+      m3A.state.campaignGold = 40;
+      expect(m3A.resolveEventChoice('event_iron_guard_deserter', 'A')).toBe(true);
+      expect(m3A.state.campaignGold).toBe(0);
+      expect(m3A.state.nextBattleBonusGold).toBe(100);
 
-      // Event 3: Iron Guard Deserter
-      // Option A: -40g for +100g next battle opening gold
-      manager.state.campaignGold = 40;
-      expect(manager.resolveEventChoice('event_iron_guard_deserter', 'A')).toBe(true);
-      expect(manager.state.campaignGold).toBe(0);
-      expect(manager.state.nextBattleBonusGold).toBe(100);
-
-      // Option B: restore +300 Citadel HP
-      manager.state.playerCitadelHp = 1000;
-      expect(manager.resolveEventChoice('event_iron_guard_deserter', 'B')).toBe(true);
-      expect(manager.state.playerCitadelHp).toBe(1300);
+      // Event 3: Iron Guard Deserter Option B (restore +300 Citadel HP)
+      const m3B = new CampaignManager(996);
+      m3B.state.currentNodeId = 'node_1_1';
+      m3B.state.playerCitadelHp = 1000;
+      expect(m3B.resolveEventChoice('event_iron_guard_deserter', 'B')).toBe(true);
+      expect(m3B.state.playerCitadelHp).toBe(1300);
     });
 
     it('Serializes and deserializes pure JSON state with 100% fidelity', () => {

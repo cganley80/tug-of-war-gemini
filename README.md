@@ -12,7 +12,8 @@
 - **[Parecer de Sign-off Sprint 1 & Especificação GD — Sprint 2](./docs/SPRINT_2_GD_SPEC.md):** Homologação da Sprint 1 pelo Game Designer, correções P0 de gameplay e especificação matemática estrita das 10 habilidades, 4 perfis de IA e HUD/Phaser 3.
 - **[Relatório de Entrega & Validação GD — Sprint 2](./docs/SPRINT_2_REPORT.md):** Relatório executivo da Sprint 2 (resolução dos 3 itens P0, 10 habilidades, 4 perfis de IA, Phaser 3 interpolado a 60 FPS + HUD tático e 111/111 testes verdes).
 - **[Parecer de Sign-off Sprint 2 & Especificação GD — Sprint 3](./docs/SPRINT_3_GD_SPEC.md):** Homologação da Sprint 2 pelo Game Designer, correções P0 (Save Gold, Memoização DOM e Pré-filtro de Aura) e especificação das 8 Relíquias Reais e Campanha Roguelike de 7 camadas.
-- **[Relatório de Entrega & Validação GD — Sprint 3 (Fechamento MVP)](./docs/SPRINT_3_REPORT.md):** Relatório executivo final do MVP com todas as 3 Sprints concluídas e 150/150 testes automatizados aprovados.
+- **[Auditoria GD Sprint 3 & Especificação de Hotfix P0](./docs/SPRINT_3_GD_AUDIT_AND_HOTFIX.md):** Parecer de auditoria da Sprint 3 e especificação dos 3 bloqueadores P0 de fechamento do loop da campanha (`P0-A`, `P0-B`, `P0-C`).
+- **[Relatório de Entrega & Validação GD — Sprint 3 (Fechamento MVP)](./docs/SPRINT_3_REPORT.md):** Relatório executivo final do MVP com todas as 3 Sprints + Hotfix P0 concluídos e 156/156 testes automatizados aprovados.
 
 ---
 
@@ -37,7 +38,7 @@
 | **Marco 0: Governança & Fundação Documental** | Concluído | `docs/GDD.md` v1.0 e `docs/GOVERNANCE.md` oficializados no repositório. |
 | **Sprint 1: Core Headless & Arena Linear Básica** | Concluído (57/57 testes) | Setup TS/Vite/Vitest, PRNG Mulberry32, Fixed Timestep 20 TPS, Grid 4x3, Economia/Mina Real, Quartel e Arquearia N1/N2, Cidadelas, Cabo de Guerra e suíte de testes determinísticos. |
 | **Sprint 2: Arsenal Completo, IA & Phaser 3** | Concluído (111/111 testes) | Correções P0 de GD, 5 Estruturas N1/N2 e 10 habilidades únicas completas, IA oponente (4 perfis + matriz de reação + Guerreiro Colossal), Renderizador Phaser 3 interpolado (60 FPS), Web Audio e HUD tático. |
-| **Sprint 3: Metagame Roguelike, Relíquias & Polimento** | Concluído (150/150 testes) | Correções P0 (Save Gold, Memoização DOM, Pré-filtro Aura), 8 Relíquias Reais, Grafo procedural de 7 camadas (Batalha, Elite, Fogueira, Mercador, 3 Eventos, Boss), persistência em `localStorage` e telas completas de campanha. |
+| **Sprint 3: Metagame Roguelike, Relíquias & Polimento** | Concluído (156/156 testes) | Correções P0 (Save Gold, Memoização DOM, Pré-filtro Aura) + Hotfix P0 (`resolvedNodeIds`, trava de Fogueira/Eventos, supressão modal Skirmish), 8 Relíquias Reais, Grafo procedural de 7 camadas, persistência em `localStorage` e telas completas de campanha. |
 
 ---
 

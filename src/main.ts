@@ -120,6 +120,7 @@ function startCampaignNodeBattle(_node: CampaignNode): void {
   const engineOptions = campaign.createBattleEngineOptions();
   currentEngine = new GameEngine(engineOptions);
   hud.invalidateGrid();
+  hud.hideGameOverModal();
   syncHudCampaignBanner();
 
   campaignOverlay.hide();
@@ -198,7 +199,8 @@ function uiUpdateLoop() {
       soundSynthesizer,
       battleScene.isGamePaused(),
       battleScene.getSimulationSpeed(),
-      battleScene.getCameraMode()
+      battleScene.getCameraMode(),
+      isCampaignBattle
     );
 
     // Handle Campaign Post-Battle Lifecycle
@@ -206,6 +208,7 @@ function uiUpdateLoop() {
       hasHandledBattleOutcome = true;
 
       if (isCampaignBattle) {
+        hud.hideGameOverModal();
         const isPlayerWinner = snapshot.winnerTeam === 'PLAYER';
         const remainingCitadelHp = snapshot.citadels.PLAYER.currentHp;
 
